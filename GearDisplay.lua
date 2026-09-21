@@ -31,12 +31,20 @@ local function SafeGetDetailedItemLevelInfo(item)
 end
 
 local function SafeGetInventoryItemLink(unit, slotId)
-    if C_Item and C_Item.GetInventoryItemLink then
-        local link = C_Item.GetInventoryItemLink(unit, slotId)
+    if GetInventoryItemLink then
+        local link = GetInventoryItemLink(unit, slotId)
         if link then return link end
     end
-    if GetInventoryItemLink then
-        return GetInventoryItemLink(unit, slotId)
+    if C_Item and C_Item.GetInventoryItemLink then
+        local ok, link = pcall(C_Item.GetInventoryItemLink, unit, slotId)
+        if ok and link then return link end
+    end
+    if unit == "player" and ItemLocation and ItemLocation.CreateFromEquipmentSlot and C_Item and C_Item.GetItemLink then
+        local ok, loc = pcall(ItemLocation.CreateFromEquipmentSlot, ItemLocation, slotId)
+        if ok and loc and loc:IsValid() and C_Item.DoesItemExist(loc) then
+            local ok2, link = pcall(C_Item.GetItemLink, loc)
+            if ok2 and link then return link end
+        end
     end
     return nil
 end
@@ -184,7 +192,8 @@ function addonTable:CreateTooltips()
         local ttName = "GearDisplayTooltip" .. slot.id
         local tt = CreateFrame("GameTooltip", ttName, UIParent, template)
         tt:SetScript("OnUpdate", nil)
-        tt:SetFrameStrata("HIGH")
+        tt:SetFrameStrata("DIALOG")
+        tt:SetFrameLevel(100)
         tt:SetClampedToScreen(true)
         tt:EnableMouse(true)
 
@@ -268,30 +277,18 @@ function addonTable:PopulateTooltip(tooltip, slotId, unit)
     tooltip:SetOwner(UIParent, "ANCHOR_NONE")
     tooltip:ClearLines()
 
-    -- Modern Mainline TooltipDataProcessor / C_TooltipInfo support
-    if C_TooltipInfo and C_TooltipInfo.GetInventoryItem and tooltip.ProcessInfo then
-        local data = C_TooltipInfo.GetInventoryItem(unit, slotId)
-        if data then
-            tooltip:ProcessInfo(data)
-        else
-            tooltip:SetInventoryItem(unit, slotId)
+    -- 1. Populate using standard Blizzard SetInventoryItem API
+    local hasLines = false
+    if tooltip.SetInventoryItem then
+        local ok = pcall(tooltip.SetInventoryItem, tooltip, unit, slotId)
+        if ok and tooltip:NumLines() and tooltip:NumLines() > 0 then
+            hasLines = true
         end
-    else
-        tooltip:SetInventoryItem(unit, slotId)
     end
 
-    -- Hyperlink fallback if needed
-    if tooltip:NumLines() == 0 then
-        if C_TooltipInfo and C_TooltipInfo.GetHyperlink and tooltip.ProcessInfo then
-            local data = C_TooltipInfo.GetHyperlink(itemLink)
-            if data then
-                tooltip:ProcessInfo(data)
-            else
-                tooltip:SetHyperlink(itemLink)
-            end
-        else
-            tooltip:SetHyperlink(itemLink)
-        end
+    -- 2. Fallback to SetHyperlink if SetInventoryItem didn't populate lines
+    if (not hasLines or (tooltip:NumLines() and tooltip:NumLines() == 0)) and itemLink and tooltip.SetHyperlink then
+        pcall(tooltip.SetHyperlink, tooltip, itemLink)
     end
 
     if tooltip.SetBackdropColor then
@@ -300,6 +297,8 @@ function addonTable:PopulateTooltip(tooltip, slotId, unit)
 
     local scale = GearDisplayDB.scale or 0.85
     tooltip:SetScale(scale)
+    tooltip:SetFrameStrata("DIALOG")
+    tooltip:SetFrameLevel(100)
 
     self:UpdateTooltipBorder(tooltip, slotId, unit)
 
@@ -435,6 +434,8 @@ function addonTable:LayoutTooltips(targetFrame)
             elseif slot.group == "LEFT_OUTER" then
                 if not slot.cosmetic or GearDisplayDB.showCosmetics then
                     table.insert(leftOuter, tt)
+                else
+                    tt:Hide()
                 end
             elseif slot.group == "RIGHT_INNER" then
                 table.insert(rightInner, tt)
@@ -461,6 +462,7 @@ function addonTable:LayoutTooltips(targetFrame)
                 tt:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, -gapY)
             end
             prev = tt
+            tt:Show()
         end
 
         local rightCombined = {}
@@ -476,6 +478,7 @@ function addonTable:LayoutTooltips(targetFrame)
                 tt:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -gapY)
             end
             prev = tt
+            tt:Show()
         end
     else
         -- Compact Grid Layout (2 columns per side)
@@ -501,6 +504,7 @@ function addonTable:LayoutTooltips(targetFrame)
             prev = tt
             local w = tt:GetWidth()
             if w > maxInnerLeftWidth then maxInnerLeftWidth = w end
+            tt:Show()
         end
         if maxInnerLeftWidth == 0 then maxInnerLeftWidth = 220 end
 
@@ -515,6 +519,7 @@ function addonTable:LayoutTooltips(targetFrame)
                 tt:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, -gapY)
             end
             prev = tt
+            tt:Show()
         end
 
         -- 3. RIGHT INNER COLUMN
@@ -530,6 +535,7 @@ function addonTable:LayoutTooltips(targetFrame)
             prev = tt
             local w = tt:GetWidth()
             if w > maxInnerRightWidth then maxInnerRightWidth = w end
+            tt:Show()
         end
         if maxInnerRightWidth == 0 then maxInnerRightWidth = 220 end
 
@@ -544,6 +550,7 @@ function addonTable:LayoutTooltips(targetFrame)
                 tt:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -gapY)
             end
             prev = tt
+            tt:Show()
         end
     end
 
@@ -554,121 +561,32 @@ function addonTable:LayoutTooltips(targetFrame)
         local tt = bottomList[1]
         tt:ClearAllPoints()
         tt:SetPoint("TOP", targetFrame, "BOTTOM", 0, bottomOffsetY)
+        tt:Show()
     elseif bottomCount == 2 then
         local tt1, tt2 = bottomList[1], bottomList[2]
         tt1:ClearAllPoints()
         tt1:SetPoint("TOPRIGHT", targetFrame, "BOTTOM", -(gapX / 2) / scale, bottomOffsetY)
+        tt1:Show()
         tt2:ClearAllPoints()
         tt2:SetPoint("TOPLEFT", targetFrame, "BOTTOM", (gapX / 2) / scale, bottomOffsetY)
+        tt2:Show()
     elseif bottomCount >= 3 then
         local tt1, tt2, tt3 = bottomList[1], bottomList[2], bottomList[3]
         tt2:ClearAllPoints()
         tt2:SetPoint("TOP", targetFrame, "BOTTOM", 0, bottomOffsetY)
+        tt2:Show()
         tt1:ClearAllPoints()
         tt1:SetPoint("TOPRIGHT", tt2, "TOPLEFT", -gapX, 0)
+        tt1:Show()
         tt3:ClearAllPoints()
         tt3:SetPoint("TOPLEFT", tt2, "TOPRIGHT", gapX, 0)
+        tt3:Show()
     end
 end
 
 -- =========================================================================
--- Top Header Summary Bar
+-- Gear Calculations (iLvl, Equipped, Durability)
 -- =========================================================================
-function addonTable:CreateHeader()
-    if self.header then return end
-
-    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-    local h = CreateFrame("Frame", "GearDisplayHeader", CharacterFrame, template)
-    h:SetHeight(28)
-    h:SetPoint("BOTTOMLEFT", CharacterFrame, "TOPLEFT", 12, 2)
-    h:SetPoint("BOTTOMRIGHT", CharacterFrame, "TOPRIGHT", -34, 2)
-    h:SetFrameStrata("HIGH")
-
-    if h.SetBackdrop then
-        h:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 }
-        })
-        h:SetBackdropColor(0.08, 0.08, 0.12, 0.94)
-        h:SetBackdropBorderColor(0.5, 0.5, 0.5, 0.9)
-    end
-
-    local icon = h:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(16, 16)
-    icon:SetPoint("LEFT", h, "LEFT", 8, 0)
-    icon:SetTexture("Interface\\Icons\\INV_Chest_Cloth_17")
-
-    local title = h:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-    title:SetText("|cff00ff00" .. L["HEADER_TITLE"] .. "|r")
-
-    local text = h:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    text:SetPoint("CENTER", h, "CENTER", 10, 0)
-    h.summaryText = text
-
-    local cfgBtn = CreateFrame("Button", nil, h, "UIPanelButtonTemplate")
-    cfgBtn:SetSize(22, 20)
-    cfgBtn:SetPoint("RIGHT", h, "RIGHT", -26, 0)
-    cfgBtn:SetText("|TInterface\\Buttons\\UI-OptionsButton:14:14:0:0|t")
-    cfgBtn:SetScript("OnClick", function()
-        addonTable:ToggleConfig()
-    end)
-    cfgBtn:SetScript("OnEnter", function(s)
-        GameTooltip:SetOwner(s, "ANCHOR_TOP")
-        GameTooltip:AddLine(L["HEADER_SETTINGS_TT"], 1, 0.82, 0)
-        GameTooltip:Show()
-    end)
-    cfgBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-    local closeBtn = CreateFrame("Button", nil, h, "UIPanelButtonTemplate")
-    closeBtn:SetSize(20, 20)
-    closeBtn:SetPoint("RIGHT", h, "RIGHT", -4, 0)
-    closeBtn:SetText("X")
-    closeBtn:SetScript("OnClick", function()
-        addonTable:HideGear()
-    end)
-    closeBtn:SetScript("OnEnter", function(s)
-        GameTooltip:SetOwner(s, "ANCHOR_TOP")
-        GameTooltip:AddLine(L["HEADER_CLOSE_TT"], 1, 0.82, 0)
-        GameTooltip:Show()
-    end)
-    closeBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
-
-    h:Hide()
-    self.header = h
-end
-
-function addonTable:UpdateHeader(unit, targetFrame)
-    if not self.header or not GearDisplayDB.showSummary then
-        if self.header then self.header:Hide() end
-        return
-    end
-
-    self.header:ClearAllPoints()
-    self.header:SetPoint("BOTTOMLEFT", targetFrame, "TOPLEFT", 12, 2)
-    self.header:SetPoint("BOTTOMRIGHT", targetFrame, "TOPRIGHT", -34, 2)
-
-    local equipped, total = self:GetEquippedCount(unit)
-    local ilvlStr = self:GetAverageGearItemLevel(unit)
-    local durStr = (unit == "player") and self:GetOverallDurabilityString() or nil
-
-    local parts = {}
-    table.insert(parts, string.format("|cffffd100%s:|r %d/%d", L["HEADER_EQUIPPED"], equipped, total))
-
-    if ilvlStr then
-        table.insert(parts, string.format("|cffffd100%s:|r %s", L["HEADER_AVG_ILVL"], ilvlStr))
-    end
-
-    if durStr then
-        table.insert(parts, string.format("|cffffd100%s:|r %s", L["HEADER_DURABILITY"], durStr))
-    end
-
-    self.header.summaryText:SetText(table.concat(parts, "  |  "))
-    self.header:Show()
-end
-
 function addonTable:GetEquippedCount(unit)
     local equipped, total = 0, 0
     for _, slot in ipairs(SLOTS_DATA) do
@@ -734,6 +652,595 @@ function addonTable:GetOverallDurabilityString()
         return string.format("%s%d%%|r", color, pct)
     end
     return "|cff00ff00100%|r"
+end
+
+-- =========================================================================
+-- Character Sheet Tab Pane (Replaces Floating Header Bar)
+-- =========================================================================
+function addonTable:CreateTabPane()
+    if self.tabPane then return end
+
+    local parent = PaperDollFrame or CharacterFrame
+    if not parent then return end
+
+    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
+    local pane = CreateFrame("Frame", "GearDisplayTabPane", parent, template)
+
+    -- Anchor seamlessly into CharacterFrame sidebar area (matching CharacterStatsPane)
+    if CharacterStatsPane then
+        pane:SetAllPoints(CharacterStatsPane)
+    elseif PaperDollSidebarTabs then
+        pane:SetPoint("TOPLEFT", PaperDollSidebarTabs, "BOTTOMLEFT", -2, -1)
+        pane:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -4, 6)
+    else
+        pane:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -4, -60)
+        pane:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -4, 6)
+        pane:SetWidth(206)
+    end
+
+    pane:SetFrameStrata(parent:GetFrameStrata() or "MEDIUM")
+    pane:SetFrameLevel((parent:GetFrameLevel() or 10) + 10)
+
+    if pane.SetBackdrop then
+        pane:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 12,
+            insets = { left = 3, right = 3, top = 3, bottom = 3 }
+        })
+        pane:SetBackdropColor(0.04, 0.04, 0.07, 0.92)
+        pane:SetBackdropBorderColor(0.38, 0.38, 0.42, 0.85)
+    end
+
+    -- 1. Top Title Header
+    local headerFrame = CreateFrame("Frame", nil, pane)
+    headerFrame:SetPoint("TOPLEFT", pane, "TOPLEFT", 6, -6)
+    headerFrame:SetPoint("TOPRIGHT", pane, "TOPRIGHT", -6, -6)
+    headerFrame:SetHeight(26)
+
+    local icon = headerFrame:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(18, 18)
+    icon:SetPoint("LEFT", headerFrame, "LEFT", 2, 0)
+    icon:SetTexture("Interface\\Icons\\INV_Chest_Cloth_17")
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    local title = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("LEFT", icon, "RIGHT", 6, 0)
+    title:SetText("|cffffd100" .. L["TAB_TITLE"] .. "|r")
+
+    local closeBtn = CreateFrame("Button", nil, headerFrame, "UIPanelCloseButton")
+    closeBtn:SetSize(22, 22)
+    closeBtn:SetPoint("RIGHT", headerFrame, "RIGHT", 2, 0)
+    closeBtn:SetScript("OnClick", function()
+        addonTable:SelectStatsTab()
+    end)
+    closeBtn:SetScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L["HEADER_CLOSE_TT"], 1, 0.82, 0)
+        GameTooltip:Show()
+    end)
+    closeBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    local divider = pane:CreateTexture(nil, "ARTWORK")
+    divider:SetPoint("TOPLEFT", headerFrame, "BOTTOMLEFT", 0, -2)
+    divider:SetPoint("TOPRIGHT", headerFrame, "BOTTOMRIGHT", 0, -2)
+    divider:SetHeight(1)
+    divider:SetColorTexture(1.0, 0.82, 0, 0.35)
+
+    -- 2. Scroll Frame
+    local scrollFrame = CreateFrame("ScrollFrame", "GearDisplayTabScrollFrame", pane, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 2, -4)
+    scrollFrame:SetPoint("BOTTOMRIGHT", pane, "BOTTOMRIGHT", -22, 6)
+
+    local scrollChild = CreateFrame("Frame", "GearDisplayTabScrollChild", scrollFrame)
+    scrollChild:SetWidth(174)
+    scrollChild:SetHeight(500)
+    scrollFrame:SetScrollChild(scrollChild)
+    pane.scrollFrame = scrollFrame
+    pane.scrollChild = scrollChild
+
+    -- 3. Live Summary Card
+    local summaryCard = CreateFrame("Frame", nil, scrollChild, template)
+    summaryCard:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
+    summaryCard:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, 0)
+    summaryCard:SetHeight(74)
+
+    if summaryCard.SetBackdrop then
+        summaryCard:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 12, edgeSize = 8,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 }
+        })
+        summaryCard:SetBackdropColor(0.10, 0.10, 0.15, 0.8)
+        summaryCard:SetBackdropBorderColor(0.38, 0.38, 0.45, 0.7)
+    end
+
+    local ilvlLabel = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    ilvlLabel:SetPoint("TOPLEFT", summaryCard, "TOPLEFT", 8, -8)
+    ilvlLabel:SetText(L["HEADER_AVG_ILVL"] .. ":")
+
+    local ilvlVal = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    ilvlVal:SetPoint("LEFT", ilvlLabel, "RIGHT", 6, 0)
+    ilvlVal:SetText("-")
+    pane.ilvlVal = ilvlVal
+
+    local eqLabel = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    eqLabel:SetPoint("TOPLEFT", ilvlLabel, "BOTTOMLEFT", 0, -6)
+    eqLabel:SetText(L["HEADER_EQUIPPED"] .. ":")
+
+    local eqVal = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    eqVal:SetPoint("LEFT", eqLabel, "RIGHT", 6, 0)
+    eqVal:SetText("-")
+    pane.eqVal = eqVal
+
+    local durLabel = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    durLabel:SetPoint("TOPLEFT", eqLabel, "BOTTOMLEFT", 0, -4)
+    durLabel:SetText(L["HEADER_DURABILITY"] .. ":")
+
+    local durVal = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    durVal:SetPoint("LEFT", durLabel, "RIGHT", 6, 0)
+    durVal:SetText("-")
+    pane.durVal = durVal
+
+    pane.summaryCard = summaryCard
+
+    -- Quick Action Buttons
+    local refreshBtn = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
+    refreshBtn:SetSize(82, 20)
+    refreshBtn:SetPoint("TOPLEFT", summaryCard, "BOTTOMLEFT", 0, -6)
+    refreshBtn:SetText(L["TAB_REFRESH"])
+    refreshBtn:SetScript("OnClick", function()
+        addonTable:RefreshGear()
+    end)
+
+    local hideBtn = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
+    hideBtn:SetSize(86, 20)
+    hideBtn:SetPoint("LEFT", refreshBtn, "RIGHT", 6, 0)
+    hideBtn:SetText(L["TAB_HIDE"])
+    hideBtn:SetScript("OnClick", function()
+        addonTable:SelectStatsTab()
+    end)
+
+    -- 4. Settings Section Header
+    local optHeader = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    optHeader:SetPoint("TOPLEFT", refreshBtn, "BOTTOMLEFT", 0, -10)
+    optHeader:SetText("|cffffd100" .. L["CONFIG_TITLE"] .. "|r")
+
+    local optDiv = scrollChild:CreateTexture(nil, "ARTWORK")
+    optDiv:SetPoint("TOPLEFT", optHeader, "BOTTOMLEFT", 0, -2)
+    optDiv:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -2)
+    optDiv:SetHeight(1)
+    optDiv:SetColorTexture(1.0, 0.82, 0, 0.25)
+
+    -- Layout Mode Toggle Buttons
+    local layoutLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    layoutLabel:SetPoint("TOPLEFT", optDiv, "BOTTOMLEFT", 0, -6)
+    layoutLabel:SetText(L["CONFIG_LAYOUT_LABEL"] .. ":")
+
+    local btnGrid = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
+    btnGrid:SetSize(82, 20)
+    btnGrid:SetPoint("TOPLEFT", layoutLabel, "BOTTOMLEFT", 0, -4)
+    btnGrid:SetText(L["CONFIG_LAYOUT_GRID"])
+    btnGrid:SetScript("OnClick", function()
+        GearDisplayDB.layout = "grid"
+        addonTable:RefreshTabPaneSettings()
+        if addonTable.isShowing then addonTable:RefreshGear() end
+    end)
+    btnGrid:SetScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L["CONFIG_LAYOUT_GRID"], 1, 0.82, 0)
+        GameTooltip:AddLine(L["CONFIG_LAYOUT_GRID_TT"], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    btnGrid:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    pane.btnGrid = btnGrid
+
+    local btnSingle = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
+    btnSingle:SetSize(86, 20)
+    btnSingle:SetPoint("LEFT", btnGrid, "RIGHT", 6, 0)
+    btnSingle:SetText(L["CONFIG_LAYOUT_SINGLE"])
+    btnSingle:SetScript("OnClick", function()
+        GearDisplayDB.layout = "single"
+        addonTable:RefreshTabPaneSettings()
+        if addonTable.isShowing then addonTable:RefreshGear() end
+    end)
+    btnSingle:SetScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L["CONFIG_LAYOUT_SINGLE"], 1, 0.82, 0)
+        GameTooltip:AddLine(L["CONFIG_LAYOUT_SINGLE_TT"], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    btnSingle:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    pane.btnSingle = btnSingle
+
+    -- Scale Slider
+    local slider = CreateFrame("Slider", "GearDisplayTabScaleSlider", scrollChild, "OptionsSliderTemplate")
+    slider:SetPoint("TOPLEFT", btnGrid, "BOTTOMLEFT", 4, -20)
+    slider:SetWidth(164)
+    slider:SetMinMaxValues(0.60, 1.20)
+    slider:SetValueStep(0.05)
+    slider:SetObeyStepOnDrag(true)
+
+    local sLabel = _G[slider:GetName() .. "Text"]
+    local sLow = _G[slider:GetName() .. "Low"]
+    local sHigh = _G[slider:GetName() .. "High"]
+    if sLow then sLow:SetText("60%") end
+    if sHigh then sHigh:SetText("120%") end
+
+    slider:SetScript("OnValueChanged", function(s, value)
+        value = math.floor(value * 20 + 0.5) / 20
+        GearDisplayDB.scale = value
+        if sLabel then
+            sLabel:SetText(string.format("%s: %d%%", L["CONFIG_SCALE_LABEL"], math.floor(value * 100 + 0.5)))
+        end
+        if addonTable.isShowing and not pane.isUpdating then
+            addonTable:RefreshGear()
+        end
+    end)
+    slider:SetScript("OnEnter", function(s)
+        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+        GameTooltip:AddLine(L["CONFIG_SCALE_LABEL"], 1, 0.82, 0)
+        GameTooltip:AddLine(L["CONFIG_SCALE_TT"], 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    slider:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    pane.scaleSlider = slider
+
+    -- Checkbox Helper
+    local function CreateTabCheck(text, ttDesc, dbKey, relativeTo, yOff)
+        local cb = CreateFrame("CheckButton", nil, scrollChild, "InterfaceOptionsCheckButtonTemplate")
+        cb:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", -4, yOff)
+        local label = cb.Text or _G[cb:GetName() .. "Text"]
+        if label then
+            label:SetText(text)
+            label:SetFontObject(GameFontHighlightSmall)
+            label:SetWordWrap(true)
+            label:SetWidth(140)
+        end
+        cb:SetScript("OnClick", function(s)
+            GearDisplayDB[dbKey] = s:GetChecked()
+            if addonTable.isShowing then
+                addonTable:RefreshGear()
+            end
+        end)
+        cb:SetScript("OnEnter", function(s)
+            GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(text, 1, 0.82, 0)
+            GameTooltip:AddLine(ttDesc, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        return cb
+    end
+
+    pane.cbAutoCenter = CreateTabCheck(L["CONFIG_AUTO_CENTER"], L["CONFIG_AUTO_CENTER_TT"], "autoCenter", slider, -14)
+    pane.cbQuality = CreateTabCheck(L["CONFIG_QUALITY_BORDERS"], L["CONFIG_QUALITY_BORDERS_TT"], "qualityBorders", pane.cbAutoCenter, -10)
+    pane.cbCosmetics = CreateTabCheck(L["CONFIG_SHOW_COSMETICS"], L["CONFIG_SHOW_COSMETICS_TT"], "showCosmetics", pane.cbQuality, -10)
+    pane.cbHideDefault = CreateTabCheck(L["CONFIG_HIDE_DEFAULT_TT"], L["CONFIG_HIDE_DEFAULT_TT_TT"], "hideDefaultTooltipOnHover", pane.cbCosmetics, -10)
+
+    -- Reset Defaults Button
+    local resetBtn = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
+    resetBtn:SetSize(168, 20)
+    resetBtn:SetPoint("TOPLEFT", pane.cbHideDefault, "BOTTOMLEFT", 4, -12)
+    resetBtn:SetText(L["CONFIG_RESET_DEFAULTS"])
+    resetBtn:SetScript("OnClick", function()
+        addonTable:ResetDB()
+    end)
+
+    -- 5. Equipped Items Section
+    local itemsHeader = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    itemsHeader:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -14)
+    itemsHeader:SetText("|cffffd100" .. L["TAB_ITEMS_HEADER"] .. "|r")
+    pane.itemsHeader = itemsHeader
+
+    local itemsDiv = scrollChild:CreateTexture(nil, "ARTWORK")
+    itemsDiv:SetPoint("TOPLEFT", itemsHeader, "BOTTOMLEFT", 0, -2)
+    itemsDiv:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -2)
+    itemsDiv:SetHeight(1)
+    itemsDiv:SetColorTexture(1.0, 0.82, 0, 0.25)
+
+    local itemsContainer = CreateFrame("Frame", nil, scrollChild)
+    itemsContainer:SetPoint("TOPLEFT", itemsDiv, "BOTTOMLEFT", 0, -4)
+    itemsContainer:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -4)
+    itemsContainer:SetHeight(10)
+    pane.itemsContainer = itemsContainer
+    pane.itemRows = {}
+
+    pane:Hide()
+    self.tabPane = pane
+end
+
+function addonTable:RefreshTabPaneSettings()
+    local pane = self.tabPane
+    if not pane then return end
+
+    pane.isUpdating = true
+
+    if pane.cbAutoCenter then pane.cbAutoCenter:SetChecked(GearDisplayDB.autoCenter) end
+    if pane.cbQuality then pane.cbQuality:SetChecked(GearDisplayDB.qualityBorders) end
+    if pane.cbCosmetics then pane.cbCosmetics:SetChecked(GearDisplayDB.showCosmetics) end
+    if pane.cbHideDefault then pane.cbHideDefault:SetChecked(GearDisplayDB.hideDefaultTooltipOnHover) end
+
+    if GearDisplayDB.layout == "single" then
+        if pane.btnSingle then pane.btnSingle:Disable() end
+        if pane.btnGrid then pane.btnGrid:Enable() end
+    else
+        if pane.btnGrid then pane.btnGrid:Disable() end
+        if pane.btnSingle then pane.btnSingle:Enable() end
+    end
+
+    local curScale = GearDisplayDB.scale or 0.85
+    if pane.scaleSlider then
+        pane.scaleSlider:SetValue(curScale)
+        local sLabel = _G[pane.scaleSlider:GetName() .. "Text"]
+        if sLabel then
+            sLabel:SetText(string.format("%s: %d%%", L["CONFIG_SCALE_LABEL"], math.floor(curScale * 100 + 0.5)))
+        end
+    end
+
+    if pane.summaryCard then
+        if GearDisplayDB.showSummary then
+            pane.summaryCard:Show()
+        else
+            pane.summaryCard:Hide()
+        end
+    end
+
+    pane.isUpdating = false
+end
+
+function addonTable:UpdateTabPaneItems(unit)
+    unit = unit or "player"
+    local pane = self.tabPane
+    if not pane or not pane.itemsContainer then return end
+
+    local container = pane.itemsContainer
+    local rows = pane.itemRows
+
+    for _, row in ipairs(rows) do
+        row:Hide()
+    end
+
+    local rowIdx = 0
+    local rowHeight = 22
+
+    for _, slot in ipairs(SLOTS_DATA) do
+        local itemLink = SafeGetInventoryItemLink(unit, slot.id)
+        local shouldShow = itemLink and (not slot.cosmetic or GearDisplayDB.showCosmetics)
+
+        if shouldShow then
+            rowIdx = rowIdx + 1
+            local row = rows[rowIdx]
+            if not row then
+                row = CreateFrame("Button", nil, container)
+                row:SetHeight(rowHeight)
+                row:SetPoint("LEFT", container, "LEFT", 0, 0)
+                row:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+
+                local hl = row:CreateTexture(nil, "HIGHLIGHT")
+                hl:SetAllPoints(row)
+                hl:SetColorTexture(1.0, 1.0, 1.0, 0.1)
+
+                local icon = row:CreateTexture(nil, "ARTWORK")
+                icon:SetSize(18, 18)
+                icon:SetPoint("LEFT", row, "LEFT", 2, 0)
+                icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                row.icon = icon
+
+                local slotText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                slotText:SetPoint("LEFT", icon, "RIGHT", 4, 0)
+                slotText:SetWidth(56)
+                slotText:SetJustifyH("LEFT")
+                slotText:SetWordWrap(false)
+                row.slotText = slotText
+
+                local ilvlText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                ilvlText:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+                ilvlText:SetJustifyH("RIGHT")
+                row.ilvlText = ilvlText
+
+                local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                nameText:SetPoint("LEFT", slotText, "RIGHT", 2, 0)
+                nameText:SetPoint("RIGHT", ilvlText, "LEFT", -4, 0)
+                nameText:SetJustifyH("LEFT")
+                nameText:SetWordWrap(false)
+                row.nameText = nameText
+
+                row:SetScript("OnEnter", function(s)
+                    if not s.slotId then return end
+                    addonTable:HighlightSlotTooltip(s.slotId, true)
+                    local slotBtn = GetSlotButton(s.slot, addonTable.currentUnit or "player")
+                    if slotBtn and slotBtn.LockHighlight then
+                        slotBtn:LockHighlight()
+                    end
+                end)
+
+                row:SetScript("OnLeave", function(s)
+                    if not s.slotId then return end
+                    addonTable:HighlightSlotTooltip(s.slotId, false)
+                    local slotBtn = GetSlotButton(s.slot, addonTable.currentUnit or "player")
+                    if slotBtn and slotBtn.UnlockHighlight then
+                        slotBtn:UnlockHighlight()
+                    end
+                end)
+
+                row:SetScript("OnClick", function(s, button)
+                    if not s.itemLink then return end
+                    if button == "LeftButton" then
+                        if IsShiftKeyDown() then
+                            if ChatEdit_InsertLink then ChatEdit_InsertLink(s.itemLink) end
+                        elseif IsControlKeyDown() then
+                            if DressUpItemLink then
+                                DressUpItemLink(s.itemLink)
+                            elseif DressUpLink then
+                                DressUpLink(s.itemLink)
+                            end
+                        end
+                    end
+                end)
+
+                rows[rowIdx] = row
+            end
+
+            row.slot = slot
+            row.slotId = slot.id
+            row.itemLink = itemLink
+
+            local itemTexture = GetInventoryItemTexture(unit, slot.id)
+            if not itemTexture and SafeGetItemInfo then
+                itemTexture = select(10, SafeGetItemInfo(itemLink))
+            end
+            row.icon:SetTexture(itemTexture or "Interface\\Icons\\INV_Misc_QuestionMark")
+
+            row.slotText:SetText(slot.name or slot.key)
+
+            local ilvl = SafeGetDetailedItemLevelInfo(itemLink) or select(4, SafeGetItemInfo(itemLink))
+            if ilvl and ilvl > 0 then
+                row.ilvlText:SetText(string.format("|cffffd100%d|r", ilvl))
+            else
+                row.ilvlText:SetText("")
+            end
+
+            local itemName = SafeGetItemInfo(itemLink) or itemLink:match("%[(.-)%]") or "Unknown"
+            local quality = SafeGetItemQuality(unit, slot.id, itemLink)
+            local r, g, b = SafeGetItemQualityColor(quality, itemLink)
+            row.nameText:SetText(itemName)
+            row.nameText:SetTextColor(r, g, b)
+
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -((rowIdx - 1) * (rowHeight + 2)))
+            row:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, -((rowIdx - 1) * (rowHeight + 2)))
+            row:Show()
+        end
+    end
+
+    local totalY = rowIdx * (rowHeight + 2)
+    container:SetHeight(math.max(10, totalY))
+
+    local totalChildHeight = 370 + totalY + 20
+    pane.scrollChild:SetHeight(math.max(400, totalChildHeight))
+end
+
+function addonTable:UpdateTabPane(unit)
+    unit = unit or "player"
+    if not self.tabPane then return end
+
+    local equipped, total = self:GetEquippedCount(unit)
+    local ilvlStr = self:GetAverageGearItemLevel(unit)
+    local durStr = (unit == "player") and self:GetOverallDurabilityString() or nil
+
+    if self.tabPane.ilvlVal then
+        self.tabPane.ilvlVal:SetText(ilvlStr and ("|cffffd100" .. ilvlStr .. "|r") or "-")
+    end
+    if self.tabPane.eqVal then
+        self.tabPane.eqVal:SetText(string.format("|cffffffff%d / %d|r", equipped, total))
+    end
+    if self.tabPane.durVal then
+        self.tabPane.durVal:SetText(durStr or "-")
+    end
+
+    if self.tabPane.itemsHeader then
+        self.tabPane.itemsHeader:SetText(string.format("|cffffd100%s (%d)|r", L["TAB_ITEMS_HEADER"], equipped))
+    end
+
+    self:RefreshTabPaneSettings()
+    self:UpdateTabPaneItems(unit)
+end
+
+function addonTable:SelectGearDisplayTab()
+    if not CharacterFrame:IsShown() then
+        if ToggleCharacter then
+            ToggleCharacter("PaperDollFrame")
+        elseif ShowUIPanel then
+            ShowUIPanel(CharacterFrame)
+        end
+    end
+
+    -- Hide Blizzard's sidebar panes
+    if CharacterStatsPane then CharacterStatsPane:Hide() end
+    if PaperDollEquipmentManagerPane then PaperDollEquipmentManagerPane:Hide() end
+    if PaperDollTitlesPane then PaperDollTitlesPane:Hide() end
+    if PetPaperDollFrameCompanionFrame then PetPaperDollFrameCompanionFrame:Hide() end
+
+    -- Deselect Blizzard sidebar tabs
+    local tabs = { PaperDollSidebarTab1, PaperDollSidebarTab2, PaperDollSidebarTab3 }
+    for _, tab in ipairs(tabs) do
+        if tab then
+            if tab.SetChecked then tab:SetChecked(false) end
+            if tab.Hilight then tab.Hilight:Hide() end
+            if tab.TabBg and tab.TabBg.SetTexCoord then
+                tab.TabBg:SetTexCoord(0.01562500, 0.79687500, 0.61328125, 0.75781250)
+            end
+        end
+    end
+
+    self:CreateTabPane()
+    if self.tabPane then
+        self.tabPane:Show()
+        self:UpdateTabPane("player")
+    end
+
+    self:ShowGear("player")
+end
+
+function addonTable:SelectStatsTab()
+    if self.tabPane then
+        self.tabPane:Hide()
+    end
+    self:HideGear()
+
+    if PaperDollSidebarTab1 and PaperDollSidebarTab1:GetScript("OnClick") then
+        PaperDollSidebarTab1:GetScript("OnClick")(PaperDollSidebarTab1)
+    elseif PaperDollFrame_SetSidebar then
+        PaperDollFrame_SetSidebar(PaperDollSidebarTab1, 1)
+    elseif CharacterStatsPane then
+        CharacterStatsPane:Show()
+        if PaperDollSidebarTab1 and PaperDollSidebarTab1.Hilight then
+            PaperDollSidebarTab1.Hilight:Show()
+        end
+    end
+end
+
+function addonTable:ToggleTab()
+    if self.isShowing and self.tabPane and self.tabPane:IsShown() then
+        self:SelectStatsTab()
+    else
+        self:SelectGearDisplayTab()
+    end
+end
+
+function addonTable:HookSidebarTabs()
+    if self.sidebarTabsHooked then return end
+
+    local function OnBlizzardSidebarTabClicked()
+        if addonTable.tabPane and addonTable.tabPane:IsShown() then
+            addonTable.tabPane:Hide()
+        end
+        if addonTable.isShowing and addonTable.currentUnit == "player" then
+            addonTable:HideGear()
+        end
+    end
+
+    if PaperDollSidebarTab1 then
+        PaperDollSidebarTab1:HookScript("OnClick", OnBlizzardSidebarTabClicked)
+    end
+    if PaperDollSidebarTab2 then
+        PaperDollSidebarTab2:HookScript("OnClick", OnBlizzardSidebarTabClicked)
+    end
+    if PaperDollSidebarTab3 then
+        PaperDollSidebarTab3:HookScript("OnClick", OnBlizzardSidebarTabClicked)
+    end
+
+    if PaperDollFrame_SetSidebar then
+        hooksecurefunc("PaperDollFrame_SetSidebar", function(tab, tabId)
+            if tabId ~= 4 then
+                OnBlizzardSidebarTabClicked()
+            end
+        end)
+    end
+
+    self.sidebarTabsHooked = true
 end
 
 -- =========================================================================
@@ -876,7 +1383,7 @@ function addonTable:InitToggleButton()
     btn.SelectedBorder = sel
 
     btn:SetScript("OnClick", function()
-        addonTable:Toggle("player")
+        addonTable:ToggleTab()
     end)
 
     btn:SetScript("OnEnter", function(s)
@@ -898,6 +1405,7 @@ function addonTable:InitToggleButton()
 
     self.toggleBtn = btn
     self:UpdateToggleButtonPosition()
+    self:HookSidebarTabs()
 
     -- Hook tab visibility changes so button automatically follows
     if PaperDollSidebarTab1 then
@@ -999,7 +1507,18 @@ function addonTable:ShowGear(unit)
     end
 
     self:CreateTooltips()
-    self:CreateHeader()
+
+    if unit == "player" then
+        self:CreateTabPane()
+        if CharacterStatsPane then CharacterStatsPane:Hide() end
+        if PaperDollEquipmentManagerPane then PaperDollEquipmentManagerPane:Hide() end
+        if PaperDollTitlesPane then PaperDollTitlesPane:Hide() end
+        if PetPaperDollFrameCompanionFrame then PetPaperDollFrameCompanionFrame:Hide() end
+        if self.tabPane then
+            self.tabPane:Show()
+            self:UpdateTabPane(unit)
+        end
+    end
 
     for _, slot in ipairs(SLOTS_DATA) do
         local tt = self.tooltips[slot.id]
@@ -1009,13 +1528,12 @@ function addonTable:ShowGear(unit)
     end
 
     self:LayoutTooltips(targetFrame)
-    self:UpdateHeader(unit, targetFrame)
     self:UpdateButton(true)
     self.isShowing = true
 end
 
 function addonTable:HideGear()
-    if not self.isShowing then return end
+    if not self.isShowing and not (self.tabPane and self.tabPane:IsShown()) then return end
 
     for _, tt in pairs(self.tooltips) do
         tt:Hide()
@@ -1023,8 +1541,8 @@ function addonTable:HideGear()
         tt.slotId = nil
     end
 
-    if self.header then
-        self.header:Hide()
+    if self.tabPane then
+        self.tabPane:Hide()
     end
 
     self:ClearAllHighlights()
@@ -1060,7 +1578,9 @@ function addonTable:RefreshGear()
     end
 
     self:LayoutTooltips(targetFrame)
-    self:UpdateHeader(unit, targetFrame)
+    if unit == "player" and self.tabPane and self.tabPane:IsShown() then
+        self:UpdateTabPane(unit)
+    end
 end
 
 -- =========================================================================
@@ -1078,6 +1598,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
     if event == "PLAYER_LOGIN" then
         addonTable:InitDB()
         addonTable:InitToggleButton()
+        addonTable:HookSidebarTabs()
         addonTable:HookSlotButtons()
         addonTable:RegisterSettingsCategory()
 

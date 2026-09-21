@@ -23,15 +23,15 @@
   - Hovering a tooltip lights up the corresponding equipment slot button on your character sheet.
 - **Live Updates:** Changes to your gear (swapping weapons, equipping new drops, changing specs) update the surrounding tooltips in real-time.
 - **Smart Auto-Centering:** When activated, automatically centers your character sheet so tooltips have plenty of room on both the left and right screen margins, and snaps it right back when closed or toggled off.
-- **Header Summary Bar:** Displays a sleek header banner above your character sheet with:
-  - Total equipped items (e.g. `16/16`)
-  - Average Item Level (e.g. `68.4`)
-  - Overall gear durability percentage (color-coded green/yellow/red)
+- **Native Character Sheet Tab:** Seamlessly integrated as a dedicated tab on the Character Frame (alongside Character Stats, Equipment Manager, and Pet):
+  - **Live Summary Card:** Average Item Level, Equipped slot count, and overall durability.
+  - **Embedded Addon Settings:** Layout mode toggle (Compact Grid vs Single Column), tooltip scale slider, quality borders, cosmetics, and auto-centering checkboxes directly inside the character sheet.
+  - **Equipped Gear Quick List:** Interactive list of equipped items with rarity colors and item levels.
+  - **Clean Tab Navigation:** Switching back to Character Stats, Equipment Manager, or Pet instantly hides Gear Display and surrounding tooltips.
 - **Interactive Controls:**
-  - **Shift-Click** any tooltip to insert its item link into your chat box.
-  - **Ctrl-Click** any tooltip to preview the item in the Dressing Room.
-- **Inspect Support:** When inspecting other players (`InspectFrame`), the "Show Gear" button appears on the inspect window to showcase their full gear setup as well!
-- **In-Game Settings Window:** Fully customizable tooltip scale (60% to 120%), layout modes (Compact Grid or Single Column), quality borders, cosmetic slots, and auto-centering.
+  - **Shift-Click** any tooltip or list item to insert its item link into chat.
+  - **Ctrl-Click** any tooltip or list item to preview the item in Dressing Room.
+  - **Hovering** any list item or character slot highlights the corresponding gear tooltip.
 
 ---
 

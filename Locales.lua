@@ -16,13 +16,20 @@ L["BTN_TOOLTIP_TIP_DRESS"] = "• Ctrl-Click any tooltip to preview in Dressing 
 L["BTN_TOOLTIP_TIP_HOVER"] = "• Hovering slots on the character sheet highlights the corresponding tooltip."
 L["BTN_TOOLTIP_TIP_CMD"] = "• Type /gd or /geardisplay for slash commands."
 
--- Header Bar
+-- Header Bar / Tab Pane
 L["HEADER_TITLE"] = "Gear Display"
 L["HEADER_EQUIPPED"] = "Equipped"
 L["HEADER_AVG_ILVL"] = "Avg iLvl"
 L["HEADER_DURABILITY"] = "Durability"
 L["HEADER_SETTINGS_TT"] = "Gear Display Settings"
 L["HEADER_CLOSE_TT"] = "Close Gear Display"
+
+L["TAB_TITLE"] = "Gear Display"
+L["TAB_SUBTITLE"] = "Equipped Overview & Options"
+L["TAB_REFRESH"] = "Refresh"
+L["TAB_HIDE"] = "Hide Gear"
+L["TAB_ITEMS_HEADER"] = "Equipped Items"
+L["TAB_NO_ITEMS"] = "No items equipped"
 
 -- Options Window
 L["CONFIG_TITLE"] = "Gear Display Options"

@@ -30,6 +30,9 @@ function addonTable:ResetDB()
     if self.configFrame and self.configFrame:IsShown() then
         self:RefreshConfigFrame()
     end
+    if self.tabPane and self.tabPane:IsShown() then
+        self:RefreshTabPaneSettings()
+    end
     if self.isShowing then
         self:RefreshGear()
     end
@@ -42,30 +45,39 @@ end
 SLASH_GEARDISPLAY1 = "/geardisplay"
 SLASH_GEARDISPLAY2 = "/gd"
 
+local function SyncSettingsUI()
+    if addonTable.configFrame and addonTable.configFrame:IsShown() then
+        addonTable:RefreshConfigFrame()
+    end
+    if addonTable.tabPane and addonTable.tabPane:IsShown() then
+        addonTable:RefreshTabPaneSettings()
+    end
+end
+
 SlashCmdList["GEARDISPLAY"] = function(msg)
     local cmd, arg = msg:match("^(%S*)%s*(.-)$")
     cmd = (cmd or ""):lower()
     arg = (arg or ""):lower()
 
     if cmd == "" then
-        addonTable:Toggle("player")
+        if addonTable.ToggleTab then
+            addonTable:ToggleTab()
+        else
+            addonTable:Toggle("player")
+        end
     elseif cmd == "config" or cmd == "options" or cmd == "opt" then
         addonTable:ToggleConfig()
     elseif cmd == "autocenter" or cmd == "center" then
         GearDisplayDB.autoCenter = not GearDisplayDB.autoCenter
         print(GearDisplayDB.autoCenter and L["MSG_AUTOCENTER_ON"] or L["MSG_AUTOCENTER_OFF"])
-        if addonTable.configFrame and addonTable.configFrame:IsShown() then
-            addonTable:RefreshConfigFrame()
-        end
+        SyncSettingsUI()
     elseif cmd == "quality" or cmd == "border" or cmd == "borders" then
         GearDisplayDB.qualityBorders = not GearDisplayDB.qualityBorders
         print(GearDisplayDB.qualityBorders and L["MSG_QUALITY_ON"] or L["MSG_QUALITY_OFF"])
         if addonTable.isShowing then
             addonTable:RefreshGear()
         end
-        if addonTable.configFrame and addonTable.configFrame:IsShown() then
-            addonTable:RefreshConfigFrame()
-        end
+        SyncSettingsUI()
     elseif cmd == "layout" then
         if GearDisplayDB.layout == "grid" then
             GearDisplayDB.layout = "single"
@@ -77,9 +89,7 @@ SlashCmdList["GEARDISPLAY"] = function(msg)
         if addonTable.isShowing then
             addonTable:RefreshGear()
         end
-        if addonTable.configFrame and addonTable.configFrame:IsShown() then
-            addonTable:RefreshConfigFrame()
-        end
+        SyncSettingsUI()
     elseif cmd == "scale" then
         local num = tonumber(arg)
         if num and num >= 0.5 and num <= 1.5 then
@@ -88,9 +98,7 @@ SlashCmdList["GEARDISPLAY"] = function(msg)
             if addonTable.isShowing then
                 addonTable:RefreshGear()
             end
-            if addonTable.configFrame and addonTable.configFrame:IsShown() then
-                addonTable:RefreshConfigFrame()
-            end
+            SyncSettingsUI()
         else
             print(L["MSG_SCALE_INVALID"])
         end
