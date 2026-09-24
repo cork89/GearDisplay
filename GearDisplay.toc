@@ -1,8 +1,9 @@
-## Interface: 16001, 11509, 11508, 40402, 30403, 110100
+## Interface: 16001
 ## Title: GearDisplay |TInterface\Icons\INV_Chest_Cloth_17:16:16:0:0|t
 ## Notes: Adds a button to your character sheet to display all equipped gear tooltips surrounding the character.
 ## Author: GearDisplay
-## Version: 1.0.0
+## Version: @project-version@
+## X-Curse-Project-ID: 1709408
 ## SavedVariables: GearDisplayDB
 ## DefaultState: enabled
 

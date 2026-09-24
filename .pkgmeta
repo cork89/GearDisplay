@@ -1,0 +1,9 @@
+package-as: GearDisplay
+    
+license-output: LICENSE
+
+ignore:
+    - .agents
+    - .github
+    - AGENTS.md
+    - "*.ps1"
