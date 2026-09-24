@@ -718,11 +718,11 @@ function addonTable:CreateTabPane()
     layoutLabel:SetText(L["CONFIG_LAYOUT_LABEL"] .. ":")
 
     local btnRow = CreateFrame("Frame", nil, content)
-    btnRow:SetSize(186, 22)
+    btnRow:SetSize(200, 22)
     btnRow:SetPoint("TOP", layoutLabel, "BOTTOM", 0, -6)
 
     local btnGrid = CreateFrame("Button", nil, btnRow, "UIPanelButtonTemplate")
-    btnGrid:SetSize(94, 22)
+    btnGrid:SetSize(98, 22)
     btnGrid:SetPoint("LEFT", btnRow, "LEFT", 0, 0)
     btnGrid:SetText(L["CONFIG_LAYOUT_GRID"])
     btnGrid:SetScript("OnClick", function()
@@ -740,7 +740,7 @@ function addonTable:CreateTabPane()
     pane.btnGrid = btnGrid
 
     local btnSingle = CreateFrame("Button", nil, btnRow, "UIPanelButtonTemplate")
-    btnSingle:SetSize(94, 22)
+    btnSingle:SetSize(98, 22)
     btnSingle:SetPoint("RIGHT", btnRow, "RIGHT", 0, 0)
     btnSingle:SetText(L["CONFIG_LAYOUT_SINGLE"])
     btnSingle:SetScript("OnClick", function()
@@ -1451,7 +1451,7 @@ function addonTable:InitInspectButton()
 
     local btn = CreateFrame("Button", "GearDisplayInspectBtn", parent, "UIPanelButtonTemplate")
     btn:SetSize(84, 22)
-    btn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -38, -44)
+    btn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -40, -38)
     btn:SetText(L["SHOW_GEAR"])
 
     btn:SetScript("OnClick", function()
