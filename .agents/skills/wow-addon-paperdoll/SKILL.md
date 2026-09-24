@@ -147,6 +147,52 @@ To maintain seamless UX with Blizzard's native tabs:
 2. Hook `PaperDollSidebarTab1..3:HookScript("OnClick", ...)` and `hooksecurefunc("PaperDollFrame_SetSidebar", ...)` so switching to any Blizzard tab automatically hides the custom pane and un-centers the frame.
 3. Clicking the custom tab when already active toggles back to `PaperDollSidebarTab1` (`CharacterStatsPane`).
 
+### 1.6 Native Bottom Tab Registration (`CharacterFrameTab4`)
+To add a true, authentic bottom tab to `CharacterFrame` (alongside `Character`, `Reputation`, `Currency`):
+
+```lua
+function addonTable:InitBottomTab()
+    if self.bottomTabInitialized or not CharacterFrame then return end
+
+    local numTabs = CharacterFrame.numTabs or 3
+    local newTabId = numTabs + 1
+    local tabName = "CharacterFrameTab" .. newTabId
+    local prevTab = _G["CharacterFrameTab" .. numTabs]
+    if not prevTab then return end
+
+    -- Inherit native Blizzard tab template
+    local ok, tab = pcall(CreateFrame, "Button", tabName, CharacterFrame, "CharacterFrameTabButtonTemplate")
+    if not ok or not tab or not tab.GetNormalTexture then
+        ok, tab = pcall(CreateFrame, "Button", tabName, CharacterFrame, "PanelTabButtonTemplate")
+    end
+    if not ok or not tab then return end
+
+    tab:SetID(newTabId)
+    tab:SetText("Gear Display")
+    tab:ClearAllPoints()
+    tab:SetPoint("LEFT", prevTab, "RIGHT", -16, 0)
+    if PanelTemplates_TabResize then
+        PanelTemplates_TabResize(tab, 0)
+    end
+
+    PanelTemplates_SetNumTabs(CharacterFrame, newTabId)
+    PanelTemplates_EnableTab(CharacterFrame, newTabId)
+
+    tab:SetScript("OnClick", function()
+        addonTable:SelectGearDisplayTab()
+    end)
+
+    self.bottomTab = tab
+    self.bottomTabId = newTabId
+    self.bottomTabInitialized = true
+end
+```
+
+#### Avoiding the "Overlay" Trap
+- **Do not** use `SetBackdrop` with `UI-Tooltip-Background` and `UI-Tooltip-Border` over native character sheet panes. That makes the pane look like a floating dialog box.
+- **Do not** include an "X" `UIPanelCloseButton`. Native tabs in WoW are switched via the bottom tab bar or keybinds, not closed with an X button.
+- Let the native Blizzard character sheet parchment inset show through.
+
 ---
 
 ## 2. Tooltip Architecture & Modern Mainline Gotchas
@@ -304,3 +350,81 @@ end
 To link hover states between character sheet buttons and custom tooltips:
 - Use `slotButton:LockHighlight()` and `slotButton:UnlockHighlight()` to highlight character sheet slots when hovering custom UI elements.
 - Hook `slotButton:HookScript("OnEnter", ...)` and `slotButton:HookScript("OnLeave", ...)` to highlight corresponding custom elements.
+
+---
+
+## 5. Native Tab Integration & Modern Mainline/Camelot Compatibility
+
+### 5.1 The `PanelTemplates_SetTab` Trap: `'for' limit must be a number`
+In Classic Era / Vanilla / Wrath, `CharacterFrame` uses standard Blizzard bottom tabs (`CharacterFrameTab1`, `CharacterFrameTab2`, etc.) and sets `CharacterFrame.numTabs`.
+However, in **Modern Mainline and Camelot (WoW Forever)**:
+- `CharacterFrame.numTabs` is **`nil`**.
+- Calling `PanelTemplates_SetTab(CharacterFrame, id)` triggers:
+  ```
+  SharedUIPanelTemplates.lua: PanelTemplates_UpdateTabs
+  'for' limit must be a number (at `for i = 1, frame.numTabs do`)
+  ```
+- **Rule**: Never call `PanelTemplates_SetTab(CharacterFrame, ...)` unless you verify `CharacterFrame.numTabs and type(CharacterFrame.numTabs) == "number" and CharacterFrame.numTabs > 0`.
+
+### 5.2 Camelot / WoW Forever Dual Tab Architecture
+In WoW Forever / Camelot (`Blizzard_UIPanels_Game/Camelot`):
+1. **Outer Mode Tabs (`CharacterFrame.ModeTabs`)**:
+   Located on the outer right edge (`CharacterFrameModeTab1` through `6`):
+   Character (PaperDoll), Reputation, Skills, PvP, Currency, Statistics.
+   Inherits `LargeSideTabButtonTemplate` (mixin `SidePanelTabButtonMixin`).
+2. **Inner PaperDoll Sidebar Tabs (`PaperDollSidebarTabs`)**:
+   Located inside `PaperDollFrame` above the stats pane:
+   - `PaperDollSidebarTab1`: Character Stats
+   - `PaperDollSidebarTab2`: Equipment Manager
+   - `PaperDollSidebarTab3`: Pet (dynamically shown/hidden)
+   Inherits `PaperDollSidebarTabTemplate` (size 42x42, mixin `PaperDollSidebarTabMixin`).
+   Managed via the `PAPERDOLL_SIDEBARS` table and `PaperDollFrame_SetSidebar(tab, index)`.
+
+### 5.3 Creating a True Native Sidebar Tab (Zero-Taint Pattern)
+> [!WARNING]
+> In WoW 11.0 / Camelot (The War Within engine), mutating `PAPERDOLL_SIDEBARS` or overriding `GetPaperDollSideBarFrame` taints execution during `CharacterFrameMixin:OnShow`, causing `playerFrameHealthBar` to crash with `attempt to compare a secret number value`.
+
+To integrate a native-looking 4th tab safely with zero taint:
+1. **Create an independent `CheckButton`**:
+   Parent it to `PaperDollSidebarTabs`, size 42x42.
+   ```lua
+   local tab = CreateFrame("CheckButton", "MyAddonSidebarTab", PaperDollSidebarTabs)
+   tab:SetSize(42, 42)
+
+   local icon = tab:CreateTexture(nil, "BACKGROUND")
+   icon:SetSize(36, 36)
+   icon:SetPoint("CENTER", 0, 0)
+   icon:SetTexture("Interface\\Icons\\INV_Chest_Cloth_17")
+   icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+   local border = tab:CreateTexture(nil, "BORDER")
+   border:SetPoint("CENTER", 0, 0)
+   border:SetAtlas("UI-Character-Info-StatTab", true)
+
+   local checked = tab:CreateTexture(nil, "OVERLAY")
+   checked:SetPoint("CENTER", 0, 0)
+   checked:SetAtlas("UI-Character-Info-StatTab-Selected", true)
+   checked:Hide()
+   tab:SetCheckedTexture(checked)
+   tab.CheckedTexture = checked
+   ```
+
+2. **Anchor to the right of the existing tabs**:
+   In Camelot, `PaperDollSidebarTab2` is centered, `Tab1` is on the left, and `Tab3` (Pet) is on the right (or `Tab2` when no pet). Anchor flush to the rightmost visible tab:
+   ```lua
+   local anchorTab = (PaperDollSidebarTab3 and PaperDollSidebarTab3:IsShown()) and PaperDollSidebarTab3
+                  or (PaperDollSidebarTab2 and PaperDollSidebarTab2:IsShown()) and PaperDollSidebarTab2
+                  or PaperDollSidebarTab1
+   tab:ClearAllPoints()
+   tab:SetPoint("LEFT", anchorTab, "RIGHT", 0, 0)
+   ```
+
+3. **Handle Mutual Exclusivity and Checked States**:
+   - When the custom tab is selected:
+     Uncheck all Blizzard tabs: `PaperDollSidebarTab1:SetChecked(false)`, `Tab2:SetChecked(false)`, `Tab3:SetChecked(false)`.
+     Check the custom tab: `tab:SetChecked(true)` and `tab.CheckedTexture:Show()`.
+     Hide Blizzard's sidebar frames (`CharacterStatsPane:Hide()`, etc.) and show the custom pane.
+   - Post-hook `OnClick` on Blizzard's `PaperDollSidebarTab1`, `Tab2`, and `Tab3` via `HookScript`:
+     When clicked, uncheck the custom tab (`tab:SetChecked(false)`) and hide the custom pane.
+
+

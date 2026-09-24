@@ -653,18 +653,23 @@ function addonTable:GetOverallDurabilityString()
     end
     return "|cff00ff00100%|r"
 end
+-- =========================================================================
+-- Character Sheet Native Tab & Pane (No Tooltip Overlay)
+-- =========================================================================
+function addonTable:GetTabPane()
+    if not self.tabPane then
+        self:CreateTabPane()
+    end
+    return self.tabPane
+end
 
--- =========================================================================
--- Character Sheet Tab Pane (Replaces Floating Header Bar)
--- =========================================================================
 function addonTable:CreateTabPane()
-    if self.tabPane then return end
+    if self.tabPane then return self.tabPane end
 
     local parent = PaperDollFrame or CharacterFrame
     if not parent then return end
 
-    local template = BackdropTemplateMixin and "BackdropTemplate" or nil
-    local pane = CreateFrame("Frame", "GearDisplayTabPane", parent, template)
+    local pane = CreateFrame("Frame", "GearDisplayTabPane", parent)
 
     -- Anchor seamlessly into CharacterFrame sidebar area (matching CharacterStatsPane)
     if CharacterStatsPane then
@@ -679,24 +684,13 @@ function addonTable:CreateTabPane()
     end
 
     pane:SetFrameStrata(parent:GetFrameStrata() or "MEDIUM")
-    pane:SetFrameLevel((parent:GetFrameLevel() or 10) + 10)
+    pane:SetFrameLevel((parent:GetFrameLevel() or 10) + 5)
 
-    if pane.SetBackdrop then
-        pane:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 16, edgeSize = 12,
-            insets = { left = 3, right = 3, top = 3, bottom = 3 }
-        })
-        pane:SetBackdropColor(0.04, 0.04, 0.07, 0.92)
-        pane:SetBackdropBorderColor(0.38, 0.38, 0.42, 0.85)
-    end
-
-    -- 1. Top Title Header
+    -- 1. Top Title Header (Native Blizzard title style, NO overlay "X" close button)
     local headerFrame = CreateFrame("Frame", nil, pane)
-    headerFrame:SetPoint("TOPLEFT", pane, "TOPLEFT", 6, -6)
-    headerFrame:SetPoint("TOPRIGHT", pane, "TOPRIGHT", -6, -6)
-    headerFrame:SetHeight(26)
+    headerFrame:SetPoint("TOPLEFT", pane, "TOPLEFT", 6, -4)
+    headerFrame:SetPoint("TOPRIGHT", pane, "TOPRIGHT", -6, -4)
+    headerFrame:SetHeight(24)
 
     local icon = headerFrame:CreateTexture(nil, "ARTWORK")
     icon:SetSize(18, 18)
@@ -704,22 +698,9 @@ function addonTable:CreateTabPane()
     icon:SetTexture("Interface\\Icons\\INV_Chest_Cloth_17")
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    local title = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local title = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("LEFT", icon, "RIGHT", 6, 0)
-    title:SetText("|cffffd100" .. L["TAB_TITLE"] .. "|r")
-
-    local closeBtn = CreateFrame("Button", nil, headerFrame, "UIPanelCloseButton")
-    closeBtn:SetSize(22, 22)
-    closeBtn:SetPoint("RIGHT", headerFrame, "RIGHT", 2, 0)
-    closeBtn:SetScript("OnClick", function()
-        addonTable:SelectStatsTab()
-    end)
-    closeBtn:SetScript("OnEnter", function(s)
-        GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(L["HEADER_CLOSE_TT"], 1, 0.82, 0)
-        GameTooltip:Show()
-    end)
-    closeBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    title:SetText(L["TAB_TITLE"])
 
     local divider = pane:CreateTexture(nil, "ARTWORK")
     divider:SetPoint("TOPLEFT", headerFrame, "BOTTOMLEFT", 0, -2)
@@ -727,100 +708,25 @@ function addonTable:CreateTabPane()
     divider:SetHeight(1)
     divider:SetColorTexture(1.0, 0.82, 0, 0.35)
 
-    -- 2. Scroll Frame
-    local scrollFrame = CreateFrame("ScrollFrame", "GearDisplayTabScrollFrame", pane, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 2, -4)
-    scrollFrame:SetPoint("BOTTOMRIGHT", pane, "BOTTOMRIGHT", -22, 6)
+    -- 2. Options Content Container (No scroll frame/bar needed)
+    local content = CreateFrame("Frame", nil, pane)
+    content:SetPoint("TOPLEFT", divider, "BOTTOMLEFT", 0, -4)
+    content:SetPoint("BOTTOMRIGHT", pane, "BOTTOMRIGHT", 0, 6)
+    pane.content = content
 
-    local scrollChild = CreateFrame("Frame", "GearDisplayTabScrollChild", scrollFrame)
-    scrollChild:SetWidth(174)
-    scrollChild:SetHeight(500)
-    scrollFrame:SetScrollChild(scrollChild)
-    pane.scrollFrame = scrollFrame
-    pane.scrollChild = scrollChild
-
-    -- 3. Live Summary Card
-    local summaryCard = CreateFrame("Frame", nil, scrollChild, template)
-    summaryCard:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
-    summaryCard:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, 0)
-    summaryCard:SetHeight(74)
-
-    if summaryCard.SetBackdrop then
-        summaryCard:SetBackdrop({
-            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-            tile = true, tileSize = 12, edgeSize = 8,
-            insets = { left = 2, right = 2, top = 2, bottom = 2 }
-        })
-        summaryCard:SetBackdropColor(0.10, 0.10, 0.15, 0.8)
-        summaryCard:SetBackdropBorderColor(0.38, 0.38, 0.45, 0.7)
-    end
-
-    local ilvlLabel = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    ilvlLabel:SetPoint("TOPLEFT", summaryCard, "TOPLEFT", 8, -8)
-    ilvlLabel:SetText(L["HEADER_AVG_ILVL"] .. ":")
-
-    local ilvlVal = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    ilvlVal:SetPoint("LEFT", ilvlLabel, "RIGHT", 6, 0)
-    ilvlVal:SetText("-")
-    pane.ilvlVal = ilvlVal
-
-    local eqLabel = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    eqLabel:SetPoint("TOPLEFT", ilvlLabel, "BOTTOMLEFT", 0, -6)
-    eqLabel:SetText(L["HEADER_EQUIPPED"] .. ":")
-
-    local eqVal = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    eqVal:SetPoint("LEFT", eqLabel, "RIGHT", 6, 0)
-    eqVal:SetText("-")
-    pane.eqVal = eqVal
-
-    local durLabel = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    durLabel:SetPoint("TOPLEFT", eqLabel, "BOTTOMLEFT", 0, -4)
-    durLabel:SetText(L["HEADER_DURABILITY"] .. ":")
-
-    local durVal = summaryCard:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    durVal:SetPoint("LEFT", durLabel, "RIGHT", 6, 0)
-    durVal:SetText("-")
-    pane.durVal = durVal
-
-    pane.summaryCard = summaryCard
-
-    -- Quick Action Buttons
-    local refreshBtn = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
-    refreshBtn:SetSize(82, 20)
-    refreshBtn:SetPoint("TOPLEFT", summaryCard, "BOTTOMLEFT", 0, -6)
-    refreshBtn:SetText(L["TAB_REFRESH"])
-    refreshBtn:SetScript("OnClick", function()
-        addonTable:RefreshGear()
-    end)
-
-    local hideBtn = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
-    hideBtn:SetSize(86, 20)
-    hideBtn:SetPoint("LEFT", refreshBtn, "RIGHT", 6, 0)
-    hideBtn:SetText(L["TAB_HIDE"])
-    hideBtn:SetScript("OnClick", function()
-        addonTable:SelectStatsTab()
-    end)
-
-    -- 4. Settings Section Header
-    local optHeader = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    optHeader:SetPoint("TOPLEFT", refreshBtn, "BOTTOMLEFT", 0, -10)
-    optHeader:SetText("|cffffd100" .. L["CONFIG_TITLE"] .. "|r")
-
-    local optDiv = scrollChild:CreateTexture(nil, "ARTWORK")
-    optDiv:SetPoint("TOPLEFT", optHeader, "BOTTOMLEFT", 0, -2)
-    optDiv:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -2)
-    optDiv:SetHeight(1)
-    optDiv:SetColorTexture(1.0, 0.82, 0, 0.25)
-
-    -- Layout Mode Toggle Buttons
-    local layoutLabel = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    layoutLabel:SetPoint("TOPLEFT", optDiv, "BOTTOMLEFT", 0, -6)
+    -- Layout Mode Section (Centered)
+    local layoutLabel = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    layoutLabel:SetPoint("TOP", content, "TOP", 0, -8)
+    layoutLabel:SetJustifyH("CENTER")
     layoutLabel:SetText(L["CONFIG_LAYOUT_LABEL"] .. ":")
 
-    local btnGrid = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
-    btnGrid:SetSize(82, 20)
-    btnGrid:SetPoint("TOPLEFT", layoutLabel, "BOTTOMLEFT", 0, -4)
+    local btnRow = CreateFrame("Frame", nil, content)
+    btnRow:SetSize(186, 22)
+    btnRow:SetPoint("TOP", layoutLabel, "BOTTOM", 0, -6)
+
+    local btnGrid = CreateFrame("Button", nil, btnRow, "UIPanelButtonTemplate")
+    btnGrid:SetSize(94, 22)
+    btnGrid:SetPoint("LEFT", btnRow, "LEFT", 0, 0)
     btnGrid:SetText(L["CONFIG_LAYOUT_GRID"])
     btnGrid:SetScript("OnClick", function()
         GearDisplayDB.layout = "grid"
@@ -836,9 +742,9 @@ function addonTable:CreateTabPane()
     btnGrid:SetScript("OnLeave", function() GameTooltip:Hide() end)
     pane.btnGrid = btnGrid
 
-    local btnSingle = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
-    btnSingle:SetSize(86, 20)
-    btnSingle:SetPoint("LEFT", btnGrid, "RIGHT", 6, 0)
+    local btnSingle = CreateFrame("Button", nil, btnRow, "UIPanelButtonTemplate")
+    btnSingle:SetSize(94, 22)
+    btnSingle:SetPoint("RIGHT", btnRow, "RIGHT", 0, 0)
     btnSingle:SetText(L["CONFIG_LAYOUT_SINGLE"])
     btnSingle:SetScript("OnClick", function()
         GearDisplayDB.layout = "single"
@@ -854,9 +760,9 @@ function addonTable:CreateTabPane()
     btnSingle:SetScript("OnLeave", function() GameTooltip:Hide() end)
     pane.btnSingle = btnSingle
 
-    -- Scale Slider
-    local slider = CreateFrame("Slider", "GearDisplayTabScaleSlider", scrollChild, "OptionsSliderTemplate")
-    slider:SetPoint("TOPLEFT", btnGrid, "BOTTOMLEFT", 4, -20)
+    -- Scale Slider (Centered)
+    local slider = CreateFrame("Slider", "GearDisplayTabScaleSlider", content, "OptionsSliderTemplate")
+    slider:SetPoint("TOP", btnRow, "BOTTOM", 0, -26)
     slider:SetWidth(164)
     slider:SetMinMaxValues(0.60, 1.20)
     slider:SetValueStep(0.05)
@@ -887,16 +793,24 @@ function addonTable:CreateTabPane()
     slider:SetScript("OnLeave", function() GameTooltip:Hide() end)
     pane.scaleSlider = slider
 
-    -- Checkbox Helper
-    local function CreateTabCheck(text, ttDesc, dbKey, relativeTo, yOff)
-        local cb = CreateFrame("CheckButton", nil, scrollChild, "InterfaceOptionsCheckButtonTemplate")
-        cb:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", -4, yOff)
+    -- Checkboxes Group (Centered as a cohesive column)
+    local checkGroup = CreateFrame("Frame", nil, content)
+    checkGroup:SetSize(170, 122)
+    checkGroup:SetPoint("TOP", slider, "BOTTOM", 0, -20)
+
+    local function CreateTabCheck(text, ttDesc, dbKey, relativeTo, isFirst)
+        local cb = CreateFrame("CheckButton", nil, checkGroup, "InterfaceOptionsCheckButtonTemplate")
+        if isFirst then
+            cb:SetPoint("TOPLEFT", checkGroup, "TOPLEFT", 0, 0)
+        else
+            cb:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", 0, -6)
+        end
         local label = cb.Text or _G[cb:GetName() .. "Text"]
         if label then
             label:SetText(text)
             label:SetFontObject(GameFontHighlightSmall)
             label:SetWordWrap(true)
-            label:SetWidth(140)
+            label:SetWidth(142)
         end
         cb:SetScript("OnClick", function(s)
             GearDisplayDB[dbKey] = s:GetChecked()
@@ -914,38 +828,19 @@ function addonTable:CreateTabPane()
         return cb
     end
 
-    pane.cbAutoCenter = CreateTabCheck(L["CONFIG_AUTO_CENTER"], L["CONFIG_AUTO_CENTER_TT"], "autoCenter", slider, -14)
-    pane.cbQuality = CreateTabCheck(L["CONFIG_QUALITY_BORDERS"], L["CONFIG_QUALITY_BORDERS_TT"], "qualityBorders", pane.cbAutoCenter, -10)
-    pane.cbCosmetics = CreateTabCheck(L["CONFIG_SHOW_COSMETICS"], L["CONFIG_SHOW_COSMETICS_TT"], "showCosmetics", pane.cbQuality, -10)
-    pane.cbHideDefault = CreateTabCheck(L["CONFIG_HIDE_DEFAULT_TT"], L["CONFIG_HIDE_DEFAULT_TT_TT"], "hideDefaultTooltipOnHover", pane.cbCosmetics, -10)
+    pane.cbAutoCenter = CreateTabCheck(L["CONFIG_AUTO_CENTER"], L["CONFIG_AUTO_CENTER_TT"], "autoCenter", checkGroup, true)
+    pane.cbQuality = CreateTabCheck(L["CONFIG_QUALITY_BORDERS"], L["CONFIG_QUALITY_BORDERS_TT"], "qualityBorders", pane.cbAutoCenter, false)
+    pane.cbCosmetics = CreateTabCheck(L["CONFIG_SHOW_COSMETICS"], L["CONFIG_SHOW_COSMETICS_TT"], "showCosmetics", pane.cbQuality, false)
+    pane.cbHideDefault = CreateTabCheck(L["CONFIG_HIDE_DEFAULT_TT"], L["CONFIG_HIDE_DEFAULT_TT_TT"], "hideDefaultTooltipOnHover", pane.cbCosmetics, false)
 
-    -- Reset Defaults Button
-    local resetBtn = CreateFrame("Button", nil, scrollChild, "UIPanelButtonTemplate")
-    resetBtn:SetSize(168, 20)
-    resetBtn:SetPoint("TOPLEFT", pane.cbHideDefault, "BOTTOMLEFT", 4, -12)
+    -- Reset Defaults Button (Centered)
+    local resetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+    resetBtn:SetSize(170, 22)
+    resetBtn:SetPoint("TOP", checkGroup, "BOTTOM", 0, -16)
     resetBtn:SetText(L["CONFIG_RESET_DEFAULTS"])
     resetBtn:SetScript("OnClick", function()
         addonTable:ResetDB()
     end)
-
-    -- 5. Equipped Items Section
-    local itemsHeader = scrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    itemsHeader:SetPoint("TOPLEFT", resetBtn, "BOTTOMLEFT", 0, -14)
-    itemsHeader:SetText("|cffffd100" .. L["TAB_ITEMS_HEADER"] .. "|r")
-    pane.itemsHeader = itemsHeader
-
-    local itemsDiv = scrollChild:CreateTexture(nil, "ARTWORK")
-    itemsDiv:SetPoint("TOPLEFT", itemsHeader, "BOTTOMLEFT", 0, -2)
-    itemsDiv:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -2)
-    itemsDiv:SetHeight(1)
-    itemsDiv:SetColorTexture(1.0, 0.82, 0, 0.25)
-
-    local itemsContainer = CreateFrame("Frame", nil, scrollChild)
-    itemsContainer:SetPoint("TOPLEFT", itemsDiv, "BOTTOMLEFT", 0, -4)
-    itemsContainer:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, -4)
-    itemsContainer:SetHeight(10)
-    pane.itemsContainer = itemsContainer
-    pane.itemRows = {}
 
     pane:Hide()
     self.tabPane = pane
@@ -970,7 +865,7 @@ function addonTable:RefreshTabPaneSettings()
         if pane.btnSingle then pane.btnSingle:Enable() end
     end
 
-    local curScale = GearDisplayDB.scale or 0.85
+    local curScale = GearDisplayDB.scale or 1.00
     if pane.scaleSlider then
         pane.scaleSlider:SetValue(curScale)
         local sLabel = _G[pane.scaleSlider:GetName() .. "Text"]
@@ -979,177 +874,222 @@ function addonTable:RefreshTabPaneSettings()
         end
     end
 
-    if pane.summaryCard then
-        if GearDisplayDB.showSummary then
-            pane.summaryCard:Show()
-        else
-            pane.summaryCard:Hide()
-        end
-    end
-
     pane.isUpdating = false
 end
 
-function addonTable:UpdateTabPaneItems(unit)
-    unit = unit or "player"
-    local pane = self.tabPane
-    if not pane or not pane.itemsContainer then return end
+function addonTable:UpdateTabPane(unit)
+    if not self.tabPane then return end
+    self:RefreshTabPaneSettings()
+end
 
-    local container = pane.itemsContainer
-    local rows = pane.itemRows
+-- =========================================================================
+-- True Native CharacterFrame Tab Integration (Zero Taint)
+-- =========================================================================
+function addonTable:InitSidebarTab()
+    if self.sidebarTabInitialized then return end
+    if not PaperDollSidebarTabs then return end
 
-    for _, row in ipairs(rows) do
-        row:Hide()
+    local tab = _G["GearDisplaySidebarTab"]
+    if not tab then
+        tab = CreateFrame("CheckButton", "GearDisplaySidebarTab", PaperDollSidebarTabs)
+        tab:SetSize(42, 42)
+
+        -- Icon (Armor chestpiece)
+        local icon = tab:CreateTexture(nil, "BACKGROUND")
+        icon:SetSize(36, 36)
+        icon:SetPoint("CENTER", 0, 0)
+        icon:SetTexture("Interface\\Icons\\INV_Chest_Cloth_17")
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        tab.Icon = icon
+
+        -- Border matching native Blizzard sidebar tabs
+        local border = tab:CreateTexture(nil, "BORDER")
+        border:SetPoint("CENTER", 0, 0)
+        if border.SetAtlas then
+            border:SetAtlas("UI-Character-Info-StatTab", true)
+        else
+            border:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-Info-StatTab")
+        end
+        tab.Border = border
+
+        -- Selected border matching native Blizzard checked state
+        local checked = tab:CreateTexture(nil, "OVERLAY")
+        checked:SetPoint("CENTER", 0, 0)
+        if checked.SetAtlas then
+            checked:SetAtlas("UI-Character-Info-StatTab-Selected", true)
+        else
+            checked:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-Info-StatTab-Selected")
+        end
+        checked:Hide()
+        tab:SetCheckedTexture(checked)
+        tab.CheckedTexture = checked
+
+        tab:SetScript("OnClick", function()
+            addonTable:ToggleTab()
+        end)
+
+        tab:SetScript("OnEnter", function(s)
+            GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
+            GameTooltip:AddLine(L["TAB_TITLE"] or "Gear Display", 1, 0.82, 0)
+            GameTooltip:AddLine(L["BTN_TOOLTIP_DESC"] or "Display equipped gear tooltips and stats panel", 1, 1, 1, true)
+            GameTooltip:AddLine(" ", 1, 1, 1)
+            GameTooltip:AddLine(L["BTN_TOOLTIP_TIPS_HEADER"] or "Quick Tips:", 1, 0.82, 0)
+            GameTooltip:AddLine(L["BTN_TOOLTIP_TIP_LINK"] or "- Shift+Click any tooltip to link item in chat", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(L["BTN_TOOLTIP_TIP_DRESS"] or "- Ctrl+Click to preview in Dressing Room", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(L["BTN_TOOLTIP_TIP_HOVER"] or "- Hover any slot on character sheet to highlight", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(L["BTN_TOOLTIP_TIP_CMD"] or "- Type /geardisplay or /gd to toggle", 0.7, 0.7, 0.7, true)
+            GameTooltip:Show()
+        end)
+        tab:SetScript("OnLeave", function() GameTooltip:Hide() end)
     end
 
-    local rowIdx = 0
-    local rowHeight = 22
+    self.toggleBtn = tab
+    self.sidebarTab = tab
+    self.sidebarTabInitialized = true
 
-    for _, slot in ipairs(SLOTS_DATA) do
-        local itemLink = SafeGetInventoryItemLink(unit, slot.id)
-        local shouldShow = itemLink and (not slot.cosmetic or GearDisplayDB.showCosmetics)
+    self:HookSidebarTabs()
+    self:UpdateSidebarLayout()
+end
 
-        if shouldShow then
-            rowIdx = rowIdx + 1
-            local row = rows[rowIdx]
-            if not row then
-                row = CreateFrame("Button", nil, container)
-                row:SetHeight(rowHeight)
-                row:SetPoint("LEFT", container, "LEFT", 0, 0)
-                row:SetPoint("RIGHT", container, "RIGHT", 0, 0)
+function addonTable:SetSidebarTabSelected(selected)
+    local tab = self.sidebarTab or _G["GearDisplaySidebarTab"]
+    if not tab then return end
+    tab.isSelected = selected
+    if tab.SetChecked then
+        tab:SetChecked(selected)
+    end
+    if tab.CheckedTexture then
+        if selected then
+            tab.CheckedTexture:Show()
+        else
+            tab.CheckedTexture:Hide()
+        end
+    end
+end
 
-                local hl = row:CreateTexture(nil, "HIGHLIGHT")
-                hl:SetAllPoints(row)
-                hl:SetColorTexture(1.0, 1.0, 1.0, 0.1)
+function addonTable:UpdateSidebarLayout()
+    local tab = self.sidebarTab or _G["GearDisplaySidebarTab"]
+    if not tab or not PaperDollSidebarTabs or not PaperDollSidebarTabs:IsShown() then return end
 
-                local icon = row:CreateTexture(nil, "ARTWORK")
-                icon:SetSize(18, 18)
-                icon:SetPoint("LEFT", row, "LEFT", 2, 0)
-                icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-                row.icon = icon
+    local anchorTab = nil
+    if PaperDollSidebarTab3 and PaperDollSidebarTab3:IsShown() then
+        anchorTab = PaperDollSidebarTab3
+    elseif PaperDollSidebarTab2 and PaperDollSidebarTab2:IsShown() then
+        anchorTab = PaperDollSidebarTab2
+    elseif PaperDollSidebarTab1 and PaperDollSidebarTab1:IsShown() then
+        anchorTab = PaperDollSidebarTab1
+    end
 
-                local slotText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                slotText:SetPoint("LEFT", icon, "RIGHT", 4, 0)
-                slotText:SetWidth(56)
-                slotText:SetJustifyH("LEFT")
-                slotText:SetWordWrap(false)
-                row.slotText = slotText
+    tab:ClearAllPoints()
+    if anchorTab then
+        tab:SetPoint("LEFT", anchorTab, "RIGHT", 0, 0)
+        tab:Show()
+    else
+        tab:Hide()
+    end
+end
 
-                local ilvlText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                ilvlText:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-                ilvlText:SetJustifyH("RIGHT")
-                row.ilvlText = ilvlText
+function addonTable:HookSidebarTabs()
+    if self.sidebarTabsHooked then return end
 
-                local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-                nameText:SetPoint("LEFT", slotText, "RIGHT", 2, 0)
-                nameText:SetPoint("RIGHT", ilvlText, "LEFT", -4, 0)
-                nameText:SetJustifyH("LEFT")
-                nameText:SetWordWrap(false)
-                row.nameText = nameText
-
-                row:SetScript("OnEnter", function(s)
-                    if not s.slotId then return end
-                    addonTable:HighlightSlotTooltip(s.slotId, true)
-                    local slotBtn = GetSlotButton(s.slot, addonTable.currentUnit or "player")
-                    if slotBtn and slotBtn.LockHighlight then
-                        slotBtn:LockHighlight()
-                    end
-                end)
-
-                row:SetScript("OnLeave", function(s)
-                    if not s.slotId then return end
-                    addonTable:HighlightSlotTooltip(s.slotId, false)
-                    local slotBtn = GetSlotButton(s.slot, addonTable.currentUnit or "player")
-                    if slotBtn and slotBtn.UnlockHighlight then
-                        slotBtn:UnlockHighlight()
-                    end
-                end)
-
-                row:SetScript("OnClick", function(s, button)
-                    if not s.itemLink then return end
-                    if button == "LeftButton" then
-                        if IsShiftKeyDown() then
-                            if ChatEdit_InsertLink then ChatEdit_InsertLink(s.itemLink) end
-                        elseif IsControlKeyDown() then
-                            if DressUpItemLink then
-                                DressUpItemLink(s.itemLink)
-                            elseif DressUpLink then
-                                DressUpLink(s.itemLink)
-                            end
-                        end
-                    end
-                end)
-
-                rows[rowIdx] = row
-            end
-
-            row.slot = slot
-            row.slotId = slot.id
-            row.itemLink = itemLink
-
-            local itemTexture = GetInventoryItemTexture(unit, slot.id)
-            if not itemTexture and SafeGetItemInfo then
-                itemTexture = select(10, SafeGetItemInfo(itemLink))
-            end
-            row.icon:SetTexture(itemTexture or "Interface\\Icons\\INV_Misc_QuestionMark")
-
-            row.slotText:SetText(slot.name or slot.key)
-
-            local ilvl = SafeGetDetailedItemLevelInfo(itemLink) or select(4, SafeGetItemInfo(itemLink))
-            if ilvl and ilvl > 0 then
-                row.ilvlText:SetText(string.format("|cffffd100%d|r", ilvl))
-            else
-                row.ilvlText:SetText("")
-            end
-
-            local itemName = SafeGetItemInfo(itemLink) or itemLink:match("%[(.-)%]") or "Unknown"
-            local quality = SafeGetItemQuality(unit, slot.id, itemLink)
-            local r, g, b = SafeGetItemQualityColor(quality, itemLink)
-            row.nameText:SetText(itemName)
-            row.nameText:SetTextColor(r, g, b)
-
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -((rowIdx - 1) * (rowHeight + 2)))
-            row:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, -((rowIdx - 1) * (rowHeight + 2)))
-            row:Show()
+    local function OnBlizzardSidebarTabClicked()
+        addonTable:SetSidebarTabSelected(false)
+        if addonTable.tabPane then
+            addonTable.tabPane:Hide()
+        end
+        if addonTable.isShowing and addonTable.currentUnit == "player" then
+            addonTable:HideGear()
         end
     end
 
-    local totalY = rowIdx * (rowHeight + 2)
-    container:SetHeight(math.max(10, totalY))
+    if PaperDollSidebarTab1 then PaperDollSidebarTab1:HookScript("OnClick", OnBlizzardSidebarTabClicked) end
+    if PaperDollSidebarTab2 then PaperDollSidebarTab2:HookScript("OnClick", OnBlizzardSidebarTabClicked) end
+    if PaperDollSidebarTab3 then PaperDollSidebarTab3:HookScript("OnClick", OnBlizzardSidebarTabClicked) end
 
-    local totalChildHeight = 370 + totalY + 20
-    pane.scrollChild:SetHeight(math.max(400, totalChildHeight))
+    self.sidebarTabsHooked = true
 end
 
-function addonTable:UpdateTabPane(unit)
-    unit = unit or "player"
-    if not self.tabPane then return end
+function addonTable:InitBottomTab()
+    -- Only for Classic Era where PaperDollSidebarTabs does NOT exist and CharacterFrame bottom tabs exist
+    if self.bottomTabInitialized or not CharacterFrame or PaperDollSidebarTabs then return end
+    if not CharacterFrameTab1 then return end
 
-    local equipped, total = self:GetEquippedCount(unit)
-    local ilvlStr = self:GetAverageGearItemLevel(unit)
-    local durStr = (unit == "player") and self:GetOverallDurabilityString() or nil
-
-    if self.tabPane.ilvlVal then
-        self.tabPane.ilvlVal:SetText(ilvlStr and ("|cffffd100" .. ilvlStr .. "|r") or "-")
-    end
-    if self.tabPane.eqVal then
-        self.tabPane.eqVal:SetText(string.format("|cffffffff%d / %d|r", equipped, total))
-    end
-    if self.tabPane.durVal then
-        self.tabPane.durVal:SetText(durStr or "-")
+    local numTabs = CharacterFrame.numTabs
+    if type(numTabs) ~= "number" or numTabs <= 0 then
+        numTabs = 0
+        while _G["CharacterFrameTab" .. (numTabs + 1)] do
+            numTabs = numTabs + 1
+        end
+        if numTabs == 0 then return end
     end
 
-    if self.tabPane.itemsHeader then
-        self.tabPane.itemsHeader:SetText(string.format("|cffffd100%s (%d)|r", L["TAB_ITEMS_HEADER"], equipped))
+    local newTabId = numTabs + 1
+    local tabName = "CharacterFrameTab" .. newTabId
+    local prevTab = _G["CharacterFrameTab" .. numTabs]
+    if not prevTab then return end
+
+    local ok, tab = pcall(CreateFrame, "Button", tabName, CharacterFrame, "CharacterFrameTabButtonTemplate")
+    if not ok or not tab or not tab.GetNormalTexture then
+        ok, tab = pcall(CreateFrame, "Button", tabName, CharacterFrame, "PanelTabButtonTemplate")
+    end
+    if not ok or not tab then return end
+
+    tab:SetID(newTabId)
+    tab:SetText(L["TAB_TITLE"] or "Gear Display")
+    tab:ClearAllPoints()
+    tab:SetPoint("LEFT", prevTab, "RIGHT", -16, 0)
+    if PanelTemplates_TabResize then
+        PanelTemplates_TabResize(tab, 0)
     end
 
-    self:RefreshTabPaneSettings()
-    self:UpdateTabPaneItems(unit)
+    tab:SetScript("OnClick", function()
+        addonTable:SelectGearDisplayTab()
+    end)
+
+    self.bottomTab = tab
+    self.bottomTabId = newTabId
+    self.bottomTabInitialized = true
 end
 
+function addonTable:HookNativeTabs()
+    if self.nativeTabsHooked then return end
+
+    local function OnBlizzardTabSwitched()
+        if addonTable.tabPane and addonTable.tabPane:IsShown() then
+            addonTable.tabPane:Hide()
+        end
+        addonTable:SetSidebarTabSelected(false)
+        if addonTable.isShowing and addonTable.currentUnit == "player" then
+            addonTable:HideGear()
+        end
+    end
+
+    if CharacterFrameTab1 then CharacterFrameTab1:HookScript("OnClick", OnBlizzardTabSwitched) end
+    if CharacterFrameTab2 then CharacterFrameTab2:HookScript("OnClick", OnBlizzardTabSwitched) end
+    if CharacterFrameTab3 then CharacterFrameTab3:HookScript("OnClick", OnBlizzardTabSwitched) end
+
+    -- On CharacterFrameModeTabs (outer tabs), safely hook OnMouseDown without modifying Blizzard methods
+    if CharacterFrame and CharacterFrame.ModeTabs and CharacterFrame.ModeTabs.Tabs then
+        for _, modeTab in ipairs(CharacterFrame.ModeTabs.Tabs) do
+            if modeTab and modeTab.HookScript then
+                modeTab:HookScript("OnMouseDown", function()
+                    if modeTab.frameName ~= "PaperDollFrame" then
+                        OnBlizzardTabSwitched()
+                    end
+                end)
+            end
+        end
+    end
+
+    self.nativeTabsHooked = true
+end
+
+-- =========================================================================
+-- Tab Switching & Mutual Exclusivity Logic
+-- =========================================================================
 function addonTable:SelectGearDisplayTab()
     if not CharacterFrame:IsShown() then
+        if InCombatLockdown and InCombatLockdown() then return end
         if ToggleCharacter then
             ToggleCharacter("PaperDollFrame")
         elseif ShowUIPanel then
@@ -1157,49 +1097,61 @@ function addonTable:SelectGearDisplayTab()
         end
     end
 
-    -- Hide Blizzard's sidebar panes
+    -- 1. Uncheck all Blizzard sidebar tabs so none of them retain the "selected" border
+    if PaperDollSidebarTab1 then PaperDollSidebarTab1:SetChecked(false) end
+    if PaperDollSidebarTab2 then PaperDollSidebarTab2:SetChecked(false) end
+    if PaperDollSidebarTab3 then PaperDollSidebarTab3:SetChecked(false) end
+
+    -- 2. Check our tab so it displays the selected border
+    self:SetSidebarTabSelected(true)
+
+    -- 3. Clear Blizzard's tracking of selected tab
+    if PaperDollFrame then
+        PaperDollFrame.selectedTab = nil
+    end
+
+    -- 4. Hide Blizzard's sidebar panes
     if CharacterStatsPane then CharacterStatsPane:Hide() end
+    if CharacterStatsPaneScrollBox then CharacterStatsPaneScrollBox:Hide() end
+    if CharacterStatsPanePetScrollBox then CharacterStatsPanePetScrollBox:Hide() end
+    if PaperDollFrame and PaperDollFrame.EquipmentManagerPane then PaperDollFrame.EquipmentManagerPane:Hide() end
     if PaperDollEquipmentManagerPane then PaperDollEquipmentManagerPane:Hide() end
     if PaperDollTitlesPane then PaperDollTitlesPane:Hide() end
     if PetPaperDollFrameCompanionFrame then PetPaperDollFrameCompanionFrame:Hide() end
 
-    -- Deselect Blizzard sidebar tabs
-    local tabs = { PaperDollSidebarTab1, PaperDollSidebarTab2, PaperDollSidebarTab3 }
-    for _, tab in ipairs(tabs) do
-        if tab then
-            if tab.SetChecked then tab:SetChecked(false) end
-            if tab.Hilight then tab.Hilight:Hide() end
-            if tab.TabBg and tab.TabBg.SetTexCoord then
-                tab.TabBg:SetTexCoord(0.01562500, 0.79687500, 0.61328125, 0.75781250)
-            end
-        end
-    end
-
+    -- 5. Show our tab pane in the character sheet sidebar area
     self:CreateTabPane()
     if self.tabPane then
         self.tabPane:Show()
         self:UpdateTabPane("player")
     end
 
+    -- 6. Show surrounding gear tooltips
     self:ShowGear("player")
+    PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
 end
 
 function addonTable:SelectStatsTab()
+    -- 1. Uncheck our tab
+    self:SetSidebarTabSelected(false)
+
+    -- 2. Hide our tab pane & tooltips
     if self.tabPane then
         self.tabPane:Hide()
     end
     self:HideGear()
 
-    if PaperDollSidebarTab1 and PaperDollSidebarTab1:GetScript("OnClick") then
-        PaperDollSidebarTab1:GetScript("OnClick")(PaperDollSidebarTab1)
-    elseif PaperDollFrame_SetSidebar then
-        PaperDollFrame_SetSidebar(PaperDollSidebarTab1, 1)
+    -- 3. Show Blizzard's Character Stats
+    if PaperDollSidebarTab1 then
+        if PaperDollSidebarTab1.Click then
+            PaperDollSidebarTab1:Click()
+        elseif PaperDollSidebarTab1:GetScript("OnClick") then
+            PaperDollSidebarTab1:GetScript("OnClick")(PaperDollSidebarTab1)
+        end
     elseif CharacterStatsPane then
         CharacterStatsPane:Show()
-        if PaperDollSidebarTab1 and PaperDollSidebarTab1.Hilight then
-            PaperDollSidebarTab1.Hilight:Show()
-        end
     end
+    PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
 end
 
 function addonTable:ToggleTab()
@@ -1210,41 +1162,8 @@ function addonTable:ToggleTab()
     end
 end
 
-function addonTable:HookSidebarTabs()
-    if self.sidebarTabsHooked then return end
-
-    local function OnBlizzardSidebarTabClicked()
-        if addonTable.tabPane and addonTable.tabPane:IsShown() then
-            addonTable.tabPane:Hide()
-        end
-        if addonTable.isShowing and addonTable.currentUnit == "player" then
-            addonTable:HideGear()
-        end
-    end
-
-    if PaperDollSidebarTab1 then
-        PaperDollSidebarTab1:HookScript("OnClick", OnBlizzardSidebarTabClicked)
-    end
-    if PaperDollSidebarTab2 then
-        PaperDollSidebarTab2:HookScript("OnClick", OnBlizzardSidebarTabClicked)
-    end
-    if PaperDollSidebarTab3 then
-        PaperDollSidebarTab3:HookScript("OnClick", OnBlizzardSidebarTabClicked)
-    end
-
-    if PaperDollFrame_SetSidebar then
-        hooksecurefunc("PaperDollFrame_SetSidebar", function(tab, tabId)
-            if tabId ~= 4 then
-                OnBlizzardSidebarTabClicked()
-            end
-        end)
-    end
-
-    self.sidebarTabsHooked = true
-end
-
 -- =========================================================================
--- Auto-Centering Mechanism
+-- Auto-Centering Mechanism (Zero Taint)
 -- =========================================================================
 function addonTable:CenterCharacterFrame()
     if self.isCentered or not CharacterFrame then return end
@@ -1260,8 +1179,6 @@ function addonTable:CenterCharacterFrame()
         table.insert(self.savedPoints, { point, relativeTo, relativePoint, x, y })
     end
 
-    CharacterFrame:SetMovable(true)
-    CharacterFrame:SetUserPlaced(true)
     CharacterFrame:ClearAllPoints()
     CharacterFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
     self.isCentered = true
@@ -1279,9 +1196,8 @@ function addonTable:RestoreCharacterFrame()
         CharacterFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 16, -116)
     end
 
-    CharacterFrame:SetUserPlaced(false)
     if UpdateUIPanelPositions then
-        UpdateUIPanelPositions()
+        securecall(UpdateUIPanelPositions)
     end
 
     self.isCentered = false
@@ -1292,10 +1208,15 @@ end
 -- Button & Show/Hide Controls
 -- =========================================================================
 function addonTable:UpdateToggleButtonPosition()
+    if self.sidebarTabInitialized and PaperDollSidebarTabs then
+        self:UpdateSidebarLayout()
+        return
+    end
+
     local btn = self.toggleBtn
     if not btn then return end
 
-    -- Find the last visible sidebar tab (e.g. Pet tab, Equipment tab, or Character tab)
+    -- Fallback button positioning for UI flavors without PaperDollSidebarTabs
     local anchorTab = nil
     if PaperDollSidebarTab3 and PaperDollSidebarTab3:IsShown() then
         anchorTab = PaperDollSidebarTab3
@@ -1313,7 +1234,6 @@ function addonTable:UpdateToggleButtonPosition()
         btn:SetFrameStrata(anchorTab:GetFrameStrata())
         btn:SetFrameLevel(anchorTab:GetFrameLevel())
 
-        -- Match tab size dynamically
         local w, h = anchorTab:GetSize()
         if w and h and w > 0 and h > 0 then
             btn:SetSize(w, h)
@@ -1333,6 +1253,12 @@ function addonTable:UpdateToggleButtonPosition()
 end
 
 function addonTable:InitToggleButton()
+    -- If sidebar tabs are supported, initialize as true native tab
+    if PaperDollSidebarTabs then
+        self:InitSidebarTab()
+        return
+    end
+
     if self.toggleBtn then return end
 
     local anchorTab = PaperDollSidebarTab3 or PaperDollSidebarTab2 or PaperDollSidebarTab1
@@ -1460,8 +1386,12 @@ function addonTable:InitInspectButton()
 end
 
 function addonTable:UpdateButton(isShowing)
+    self:SetSidebarTabSelected(isShowing)
     local btn = self.toggleBtn
     if btn then
+        if btn.SetChecked then
+            btn:SetChecked(isShowing)
+        end
         if btn.SelectedBorder then
             if isShowing then
                 btn.SelectedBorder:Show()
@@ -1494,6 +1424,7 @@ function addonTable:ShowGear(unit)
     local targetFrame = (unit == "player") and CharacterFrame or InspectFrame
     if not targetFrame or not targetFrame:IsShown() then
         if unit == "player" then
+            if InCombatLockdown and InCombatLockdown() then return end
             if ToggleCharacter then
                 ToggleCharacter("PaperDollFrame")
             elseif ShowUIPanel then
@@ -1597,6 +1528,9 @@ eventFrame:RegisterEvent("UNIT_PET")
 eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
     if event == "PLAYER_LOGIN" then
         addonTable:InitDB()
+        addonTable:InitSidebarTab()
+        addonTable:InitBottomTab()
+        addonTable:HookNativeTabs()
         addonTable:InitToggleButton()
         addonTable:HookSidebarTabs()
         addonTable:HookSlotButtons()
@@ -1604,23 +1538,36 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
 
         if CharacterFrame then
             CharacterFrame:HookScript("OnShow", function()
+                addonTable:InitSidebarTab()
+                addonTable:InitBottomTab()
+                addonTable:UpdateSidebarLayout()
                 addonTable:UpdateToggleButtonPosition()
             end)
             CharacterFrame:HookScript("OnHide", function()
                 if addonTable.isShowing and addonTable.currentUnit == "player" then
                     addonTable:HideGear()
                 end
+                if addonTable.tabPane and addonTable.tabPane:IsShown() then
+                    addonTable.tabPane:Hide()
+                end
+                addonTable:SetSidebarTabSelected(false)
             end)
         end
 
         if PaperDollFrame then
             PaperDollFrame:HookScript("OnShow", function()
+                addonTable:InitSidebarTab()
+                addonTable:UpdateSidebarLayout()
                 addonTable:UpdateToggleButtonPosition()
             end)
             PaperDollFrame:HookScript("OnHide", function()
                 if addonTable.isShowing and addonTable.currentUnit == "player" then
                     addonTable:HideGear()
                 end
+                if addonTable.tabPane and addonTable.tabPane:IsShown() then
+                    addonTable.tabPane:Hide()
+                end
+                addonTable:SetSidebarTabSelected(false)
             end)
         end
 
@@ -1631,6 +1578,7 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
 
     elseif event == "UNIT_PET" then
         if arg1 == "player" then
+            addonTable:UpdateSidebarLayout()
             addonTable:UpdateToggleButtonPosition()
         end
 

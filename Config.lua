@@ -2,12 +2,12 @@ local addonName, addonTable = ...
 local L = addonTable.L
 
 local DEFAULTS = {
-    scale = 0.85,
+    scale = 1.00,
     autoCenter = true,
     qualityBorders = true,
-    showCosmetics = true,
+    showCosmetics = false,
     showSummary = true,
-    hideDefaultTooltipOnHover = true,
+    hideDefaultTooltipOnHover = false,
     layout = "grid", -- "grid" or "single"
 }
 
