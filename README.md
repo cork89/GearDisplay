@@ -76,3 +76,10 @@
 - **Cataclysm Classic (4.4.x)**
 - **Wrath of the Lich King Classic (3.4.x)**
 - **Dragonflight (10.x)**
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
