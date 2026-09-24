@@ -143,10 +143,10 @@ local SLOTS_DATA = {
     { id = 13, key = "TRINKET1",  name = (INVTYPE_TRINKET or "Trinket") .. " 1", slotName = "Trinket0Slot",  btn = "CharacterTrinket0Slot",      inspectBtn = "InspectTrinket0Slot",      group = "RIGHT_OUTER", order = 3 },
     { id = 14, key = "TRINKET2",  name = (INVTYPE_TRINKET or "Trinket") .. " 2", slotName = "Trinket1Slot",  btn = "CharacterTrinket1Slot",      inspectBtn = "InspectTrinket1Slot",      group = "RIGHT_OUTER", order = 4 },
 
-    -- Bottom Row (Weapons / Off-hand / Ranged)
-    { id = 16, key = "MAINHAND",  name = INVTYPE_WEAPONMAINHAND or "Main Hand", slotName = "MainHandSlot",   btn = "CharacterMainHandSlot",      inspectBtn = "InspectMainHandSlot",      group = "BOTTOM",      order = 1 },
-    { id = 17, key = "OFFHAND",   name = INVTYPE_WEAPONOFFHAND or "Off Hand",   slotName = "SecondaryHandSlot", btn = "CharacterSecondaryHandSlot", inspectBtn = "InspectSecondaryHandSlot", group = "BOTTOM",      order = 2 },
-    { id = 18, key = "RANGED",    name = INVTYPE_RANGED or "Ranged",            slotName = "RangedSlot",        btn = "CharacterRangedSlot",         inspectBtn = "InspectRangedSlot",        group = "BOTTOM",      order = 3 },
+    -- Top Row (Weapons / Off-hand / Ranged)
+    { id = 16, key = "MAINHAND",  name = INVTYPE_WEAPONMAINHAND or "Main Hand", slotName = "MainHandSlot",   btn = "CharacterMainHandSlot",      inspectBtn = "InspectMainHandSlot",      group = "WEAPONS",     order = 1 },
+    { id = 17, key = "OFFHAND",   name = INVTYPE_WEAPONOFFHAND or "Off Hand",   slotName = "SecondaryHandSlot", btn = "CharacterSecondaryHandSlot", inspectBtn = "InspectSecondaryHandSlot", group = "WEAPONS",     order = 2 },
+    { id = 18, key = "RANGED",    name = INVTYPE_RANGED or "Ranged",            slotName = "RangedSlot",        btn = "CharacterRangedSlot",         inspectBtn = "InspectRangedSlot",        group = "WEAPONS",     order = 3 },
 }
 addonTable.SLOTS_DATA = SLOTS_DATA
 
@@ -490,7 +490,7 @@ function addonTable:LayoutTooltips(targetFrame)
 
     local leftInner, leftOuter = {}, {}
     local rightInner, rightOuter = {}, {}
-    local bottomList = {}
+    local weaponList = {}
 
     for _, slot in ipairs(SLOTS_DATA) do
         local tt = self.tooltips[slot.id]
@@ -507,8 +507,8 @@ function addonTable:LayoutTooltips(targetFrame)
                 table.insert(rightInner, tt)
             elseif slot.group == "RIGHT_OUTER" then
                 table.insert(rightOuter, tt)
-            elseif slot.group == "BOTTOM" then
-                table.insert(bottomList, tt)
+            elseif slot.group == "WEAPONS" or slot.group == "BOTTOM" then
+                table.insert(weaponList, tt)
             end
         end
     end
@@ -620,32 +620,32 @@ function addonTable:LayoutTooltips(targetFrame)
         end
     end
 
-    -- 5. BOTTOM ROW (Weapons)
-    local bottomCount = #bottomList
-    local bottomOffsetY = -10 / scale
-    if bottomCount == 1 then
-        local tt = bottomList[1]
+    -- 5. TOP ROW (Weapons / Off-Hand / Ranged above frame)
+    local weaponCount = #weaponList
+    local topOffsetY = 10 / scale
+    if weaponCount == 1 then
+        local tt = weaponList[1]
         tt:ClearAllPoints()
-        tt:SetPoint("TOP", targetFrame, "BOTTOM", 0, bottomOffsetY)
+        tt:SetPoint("BOTTOM", targetFrame, "TOP", 0, topOffsetY)
         tt:Show()
-    elseif bottomCount == 2 then
-        local tt1, tt2 = bottomList[1], bottomList[2]
+    elseif weaponCount == 2 then
+        local tt1, tt2 = weaponList[1], weaponList[2]
         tt1:ClearAllPoints()
-        tt1:SetPoint("TOPRIGHT", targetFrame, "BOTTOM", -(gapX / 2) / scale, bottomOffsetY)
+        tt1:SetPoint("BOTTOMRIGHT", targetFrame, "TOP", -(gapX / 2) / scale, topOffsetY)
         tt1:Show()
         tt2:ClearAllPoints()
-        tt2:SetPoint("TOPLEFT", targetFrame, "BOTTOM", (gapX / 2) / scale, bottomOffsetY)
+        tt2:SetPoint("BOTTOMLEFT", targetFrame, "TOP", (gapX / 2) / scale, topOffsetY)
         tt2:Show()
-    elseif bottomCount >= 3 then
-        local tt1, tt2, tt3 = bottomList[1], bottomList[2], bottomList[3]
+    elseif weaponCount >= 3 then
+        local tt1, tt2, tt3 = weaponList[1], weaponList[2], weaponList[3]
         tt2:ClearAllPoints()
-        tt2:SetPoint("TOP", targetFrame, "BOTTOM", 0, bottomOffsetY)
+        tt2:SetPoint("BOTTOM", targetFrame, "TOP", 0, topOffsetY)
         tt2:Show()
         tt1:ClearAllPoints()
-        tt1:SetPoint("TOPRIGHT", tt2, "TOPLEFT", -gapX, 0)
+        tt1:SetPoint("BOTTOMRIGHT", tt2, "BOTTOMLEFT", -gapX, 0)
         tt1:Show()
         tt3:ClearAllPoints()
-        tt3:SetPoint("TOPLEFT", tt2, "TOPRIGHT", gapX, 0)
+        tt3:SetPoint("BOTTOMLEFT", tt2, "BOTTOMRIGHT", gapX, 0)
         tt3:Show()
     end
 end
@@ -1234,7 +1234,7 @@ function addonTable:CenterCharacterFrame()
     end
 
     CharacterFrame:ClearAllPoints()
-    CharacterFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
+    CharacterFrame:SetPoint("CENTER", UIParent, "CENTER", 0, -20)
     self.isCentered = true
 end
 
@@ -1281,7 +1281,7 @@ function addonTable:CenterInspectFrame()
     end
 
     targetFrame:ClearAllPoints()
-    targetFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
+    targetFrame:SetPoint("CENTER", UIParent, "CENTER", 0, -20)
     self.isInspectCentered = true
 end
 

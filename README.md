@@ -35,7 +35,7 @@
   - **Compact Grid Mode (Default):**
     - *Left Side:* 2 columns featuring upper armor & accessories (Head, Neck, Shoulders, Back, Chest, Wrist).
     - *Right Side:* 2 columns featuring lower armor & jewelry (Hands, Waist, Legs, Feet, Rings, Trinkets).
-    - *Bottom Row:* Weapons, off-hands, shields, and ranged relics centered directly below your character model.
+    - *Top Row:* Weapons, off-hands, shields, and ranged relics centered directly above your character frame.
   - **Single Column Mode:**
     - Clean single-column layout flanking each side of the Character Sheet, ideal for narrower displays or ultra-wide setups.
 - **High-Visibility Bi-Directional Hover Highlighting:**
