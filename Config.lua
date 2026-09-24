@@ -6,7 +6,6 @@ local DEFAULTS = {
     autoCenter = true,
     qualityBorders = true,
     showCosmetics = false,
-    showSummary = true,
     hideDefaultTooltipOnHover = false,
     layout = "grid", -- "grid" or "single"
 }
@@ -19,6 +18,24 @@ function addonTable:InitDB()
         if GearDisplayDB[k] == nil then
             GearDisplayDB[k] = v
         end
+    end
+
+    -- Sanitize scale (must be a number clamped between 0.60 and 1.20)
+    if type(GearDisplayDB.scale) ~= "number" or GearDisplayDB.scale < 0.60 or GearDisplayDB.scale > 1.20 then
+        GearDisplayDB.scale = 1.00
+    end
+
+    -- Sanitize booleans
+    local boolKeys = { "autoCenter", "qualityBorders", "showCosmetics", "hideDefaultTooltipOnHover" }
+    for _, k in ipairs(boolKeys) do
+        if type(GearDisplayDB[k]) ~= "boolean" then
+            GearDisplayDB[k] = DEFAULTS[k]
+        end
+    end
+
+    -- Sanitize layout mode
+    if GearDisplayDB.layout ~= "grid" and GearDisplayDB.layout ~= "single" then
+        GearDisplayDB.layout = "grid"
     end
 end
 
@@ -92,7 +109,7 @@ SlashCmdList["GEARDISPLAY"] = function(msg)
         SyncSettingsUI()
     elseif cmd == "scale" then
         local num = tonumber(arg)
-        if num and num >= 0.5 and num <= 1.5 then
+        if num and num >= 0.60 and num <= 1.20 then
             GearDisplayDB.scale = num
             print(string.format(L["MSG_SCALE_SET"], math.floor(num * 100 + 0.5)))
             if addonTable.isShowing then
@@ -163,11 +180,15 @@ function addonTable:CreateConfigFrame()
     local function CreateCheck(text, ttDesc, dbKey, yOff)
         local cb = CreateFrame("CheckButton", nil, content, "InterfaceOptionsCheckButtonTemplate")
         cb:SetPoint("TOPLEFT", content, "TOPLEFT", 8, yOff)
-        local label = cb.Text or _G[cb:GetName() .. "Text"]
-        if label then
-            label:SetText(text)
-            label:SetFontObject(GameFontNormal)
+        local cbName = cb:GetName()
+        local label = cb.Text or (cbName and _G[cbName .. "Text"])
+        if not label then
+            label = cb:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+            label:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+            cb.Text = label
         end
+        label:SetText(text)
+        label:SetFontObject(GameFontNormal)
         cb:SetScript("OnClick", function(self)
             GearDisplayDB[dbKey] = self:GetChecked()
             if addonTable.isShowing then
@@ -187,12 +208,11 @@ function addonTable:CreateConfigFrame()
     f.cbAutoCenter = CreateCheck(L["CONFIG_AUTO_CENTER"], L["CONFIG_AUTO_CENTER_TT"], "autoCenter", 0)
     f.cbQuality = CreateCheck(L["CONFIG_QUALITY_BORDERS"], L["CONFIG_QUALITY_BORDERS_TT"], "qualityBorders", -30)
     f.cbCosmetics = CreateCheck(L["CONFIG_SHOW_COSMETICS"], L["CONFIG_SHOW_COSMETICS_TT"], "showCosmetics", -60)
-    f.cbSummary = CreateCheck(L["CONFIG_SHOW_SUMMARY"], L["CONFIG_SHOW_SUMMARY_TT"], "showSummary", -90)
-    f.cbHideDefault = CreateCheck(L["CONFIG_HIDE_DEFAULT_TT"], L["CONFIG_HIDE_DEFAULT_TT_TT"], "hideDefaultTooltipOnHover", -120)
+    f.cbHideDefault = CreateCheck(L["CONFIG_HIDE_DEFAULT_TT"], L["CONFIG_HIDE_DEFAULT_TT_TT"], "hideDefaultTooltipOnHover", -90)
 
     -- Layout Mode Section
     local layoutLabel = content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    layoutLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 10, -162)
+    layoutLabel:SetPoint("TOPLEFT", content, "TOPLEFT", 10, -132)
     layoutLabel:SetText(L["CONFIG_LAYOUT_LABEL"] .. ":")
 
     local btnGrid = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
@@ -296,7 +316,6 @@ function addonTable:RefreshConfigFrame()
     f.cbAutoCenter:SetChecked(GearDisplayDB.autoCenter)
     f.cbQuality:SetChecked(GearDisplayDB.qualityBorders)
     f.cbCosmetics:SetChecked(GearDisplayDB.showCosmetics)
-    f.cbSummary:SetChecked(GearDisplayDB.showSummary)
     f.cbHideDefault:SetChecked(GearDisplayDB.hideDefaultTooltipOnHover)
 
     if GearDisplayDB.layout == "single" then
@@ -307,7 +326,7 @@ function addonTable:RefreshConfigFrame()
         f.btnSingle:Enable()
     end
 
-    local curScale = GearDisplayDB.scale or 0.85
+    local curScale = GearDisplayDB.scale or 1.00
     f.scaleSlider:SetValue(curScale)
     local sLabel = _G[f.scaleSlider:GetName() .. "Text"]
     if sLabel then

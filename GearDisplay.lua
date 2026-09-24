@@ -6,6 +6,11 @@ addonTable.isShowing = false
 addonTable.currentUnit = nil
 addonTable.isCentered = false
 addonTable.savedPoints = {}
+addonTable.pendingRestore = false
+addonTable.isInspectCentered = false
+addonTable.savedInspectPoints = {}
+addonTable.pendingInspectRestore = false
+addonTable.slotGlows = addonTable.slotGlows or {}
 
 -- =========================================================================
 -- Safe Modern API Wrappers (Supports Modern Mainline / WoW Forever & Classic)
@@ -16,16 +21,6 @@ local function SafeGetItemInfo(item)
         return C_Item.GetItemInfo(item)
     elseif GetItemInfo then
         return GetItemInfo(item)
-    end
-    return nil
-end
-
-local function SafeGetDetailedItemLevelInfo(item)
-    if not item then return nil end
-    if C_Item and C_Item.GetDetailedItemLevelInfo then
-        return C_Item.GetDetailedItemLevelInfo(item)
-    elseif GetDetailedItemLevelInfo then
-        return GetDetailedItemLevelInfo(item)
     end
     return nil
 end
@@ -118,13 +113,6 @@ local function SafeGetItemQualityColor(quality, itemLink)
     end
 
     return 0.6, 0.6, 0.6
-end
-
-local function SafeGetInventoryItemDurability(slotId)
-    if GetInventoryItemDurability then
-        return GetInventoryItemDurability(slotId)
-    end
-    return nil, nil
 end
 
 -- =========================================================================
@@ -249,6 +237,10 @@ function addonTable:OnTooltipClick(tooltip, slot, button)
     if not tooltip.itemLink then return end
 
     if button == "LeftButton" then
+        if HandleModifiedItemClick and HandleModifiedItemClick(tooltip.itemLink) then
+            return
+        end
+
         if IsShiftKeyDown() then
             if ChatEdit_InsertLink then
                 ChatEdit_InsertLink(tooltip.itemLink)
@@ -267,26 +259,27 @@ function addonTable:HighlightSlotButton(slot, isHighlighted)
     local slotBtn = GetSlotButton(slot, self.currentUnit)
     if not slotBtn then return end
 
+    local glow = self.slotGlows[slotBtn]
     if isHighlighted then
         if slotBtn.LockHighlight then
             slotBtn:LockHighlight()
         end
-        if not slotBtn.GearDisplayGlow then
-            local g = slotBtn:CreateTexture(nil, "OVERLAY")
-            g:SetPoint("TOPLEFT", slotBtn, "TOPLEFT", -3, 3)
-            g:SetPoint("BOTTOMRIGHT", slotBtn, "BOTTOMRIGHT", 3, -3)
-            g:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
-            g:SetBlendMode("ADD")
-            g:SetVertexColor(1.0, 0.85, 0.1, 1.0)
-            slotBtn.GearDisplayGlow = g
+        if not glow then
+            glow = slotBtn:CreateTexture(nil, "OVERLAY")
+            glow:SetPoint("TOPLEFT", slotBtn, "TOPLEFT", -3, 3)
+            glow:SetPoint("BOTTOMRIGHT", slotBtn, "BOTTOMRIGHT", 3, -3)
+            glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+            glow:SetBlendMode("ADD")
+            glow:SetVertexColor(1.0, 0.85, 0.1, 1.0)
+            self.slotGlows[slotBtn] = glow
         end
-        slotBtn.GearDisplayGlow:Show()
+        glow:Show()
     else
         if slotBtn.UnlockHighlight then
             slotBtn:UnlockHighlight()
         end
-        if slotBtn.GearDisplayGlow then
-            slotBtn.GearDisplayGlow:Hide()
+        if glow then
+            glow:Hide()
         end
     end
 end
@@ -301,12 +294,6 @@ function addonTable:SetTooltipHighlight(tooltip, isHighlighted, slotId)
                 tooltip.HoverGlow.pulseAnim:Play()
             end
         end
-        if tooltip.ThickBorder then
-            tooltip.ThickBorder:Show()
-        end
-        if tooltip.TopAccent then
-            tooltip.TopAccent:Show()
-        end
         if tooltip.SetBackdropBorderColor then
             tooltip:SetBackdropBorderColor(1.0, 0.85, 0.1, 1.0)
         end
@@ -319,12 +306,6 @@ function addonTable:SetTooltipHighlight(tooltip, isHighlighted, slotId)
                 tooltip.HoverGlow.pulseAnim:Stop()
             end
             tooltip.HoverGlow:Hide()
-        end
-        if tooltip.ThickBorder then
-            tooltip.ThickBorder:Hide()
-        end
-        if tooltip.TopAccent then
-            tooltip.TopAccent:Hide()
         end
         if slotId then
             self:UpdateTooltipBorder(tooltip, slotId, self.currentUnit)
@@ -376,7 +357,7 @@ function addonTable:PopulateTooltip(tooltip, slotId, unit)
         tooltip:SetBackdropColor(0.06, 0.06, 0.09, 0.95)
     end
 
-    local scale = GearDisplayDB.scale or 0.85
+    local scale = GearDisplayDB.scale or 1.00
     tooltip:SetScale(scale)
     tooltip:SetFrameStrata("DIALOG")
     tooltip:SetFrameLevel(100)
@@ -485,6 +466,14 @@ function addonTable:ClearAllHighlights()
             self:SetTooltipHighlight(tt, false, slot.id)
         end
     end
+    if self.slotGlows then
+        for btn, glow in pairs(self.slotGlows) do
+            if glow then glow:Hide() end
+            if btn and btn.UnlockHighlight then
+                btn:UnlockHighlight()
+            end
+        end
+    end
 end
 
 -- =========================================================================
@@ -494,7 +483,7 @@ function addonTable:LayoutTooltips(targetFrame)
     targetFrame = targetFrame or CharacterFrame
     if not targetFrame then return end
 
-    local scale = GearDisplayDB.scale or 0.85
+    local scale = GearDisplayDB.scale or 1.00
     local layoutMode = GearDisplayDB.layout or "grid"
     local gapY = 6
     local gapX = 8
@@ -587,7 +576,7 @@ function addonTable:LayoutTooltips(targetFrame)
 
         -- 2. LEFT OUTER COLUMN
         prev = nil
-        local outerLeftXOffset = (gapX + maxInnerLeftWidth + gapX) / scale
+        local outerLeftXOffset = (gapX / scale) + maxInnerLeftWidth + (gapX / scale)
         for _, tt in ipairs(leftOuter) do
             tt:ClearAllPoints()
             if not prev then
@@ -618,7 +607,7 @@ function addonTable:LayoutTooltips(targetFrame)
 
         -- 4. RIGHT OUTER COLUMN
         prev = nil
-        local outerRightXOffset = (gapX + maxInnerRightWidth + gapX) / scale
+        local outerRightXOffset = (gapX / scale) + maxInnerRightWidth + (gapX / scale)
         for _, tt in ipairs(rightOuter) do
             tt:ClearAllPoints()
             if not prev then
@@ -661,75 +650,6 @@ function addonTable:LayoutTooltips(targetFrame)
     end
 end
 
--- =========================================================================
--- Gear Calculations (iLvl, Equipped, Durability)
--- =========================================================================
-function addonTable:GetEquippedCount(unit)
-    local equipped, total = 0, 0
-    for _, slot in ipairs(SLOTS_DATA) do
-        if not slot.cosmetic then
-            total = total + 1
-            if SafeGetInventoryItemLink(unit, slot.id) then
-                equipped = equipped + 1
-            end
-        end
-    end
-    return equipped, total
-end
-
-function addonTable:GetAverageGearItemLevel(unit)
-    if unit == "player" and GetAverageItemLevel then
-        local _, avgEquipped = GetAverageItemLevel()
-        if avgEquipped and avgEquipped > 0 then
-            return string.format("%.1f", avgEquipped)
-        end
-    end
-
-    local totalIlvl, count = 0, 0
-    for _, slot in ipairs(SLOTS_DATA) do
-        if not slot.cosmetic then
-            local itemLink = SafeGetInventoryItemLink(unit, slot.id)
-            if itemLink then
-                local ilvl = SafeGetDetailedItemLevelInfo(itemLink)
-                if not ilvl then
-                    ilvl = select(4, SafeGetItemInfo(itemLink))
-                end
-                if ilvl and ilvl > 0 then
-                    totalIlvl = totalIlvl + ilvl
-                    count = count + 1
-                end
-            end
-        end
-    end
-
-    if count > 0 then
-        return string.format("%.1f", totalIlvl / count)
-    end
-    return nil
-end
-
-function addonTable:GetOverallDurabilityString()
-    local totalCurrent, totalMax = 0, 0
-    for _, slot in ipairs(SLOTS_DATA) do
-        local cur, max = SafeGetInventoryItemDurability(slot.id)
-        if cur and max and max > 0 then
-            totalCurrent = totalCurrent + cur
-            totalMax = totalMax + max
-        end
-    end
-
-    if totalMax > 0 then
-        local pct = math.floor((totalCurrent / totalMax) * 100)
-        local color = "|cff00ff00"
-        if pct < 40 then
-            color = "|cffff4444"
-        elseif pct < 80 then
-            color = "|cffffff00"
-        end
-        return string.format("%s%d%%|r", color, pct)
-    end
-    return "|cff00ff00100%|r"
-end
 -- =========================================================================
 -- Character Sheet Native Tab & Pane (No Tooltip Overlay)
 -- =========================================================================
@@ -882,13 +802,17 @@ function addonTable:CreateTabPane()
         else
             cb:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", 0, -6)
         end
-        local label = cb.Text or _G[cb:GetName() .. "Text"]
-        if label then
-            label:SetText(text)
-            label:SetFontObject(GameFontHighlightSmall)
-            label:SetWordWrap(true)
-            label:SetWidth(142)
+        local cbName = cb:GetName()
+        local label = cb.Text or (cbName and _G[cbName .. "Text"])
+        if not label then
+            label = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+            label:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+            cb.Text = label
         end
+        label:SetText(text)
+        label:SetFontObject(GameFontHighlightSmall)
+        label:SetWordWrap(true)
+        label:SetWidth(142)
         cb:SetScript("OnClick", function(s)
             GearDisplayDB[dbKey] = s:GetChecked()
             if addonTable.isShowing then
@@ -985,7 +909,8 @@ function addonTable:InitSidebarTab()
         if border.SetAtlas then
             border:SetAtlas("UI-Character-Info-StatTab", true)
         else
-            border:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-Info-StatTab")
+            border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+            border:SetSize(42, 42)
         end
         tab.Border = border
 
@@ -995,7 +920,9 @@ function addonTable:InitSidebarTab()
         if checked.SetAtlas then
             checked:SetAtlas("UI-Character-Info-StatTab-Selected", true)
         else
-            checked:SetTexture("Interface\\PaperDollInfoFrame\\UI-Character-Info-StatTab-Selected")
+            checked:SetTexture("Interface\\Buttons\\CheckButtonHilight")
+            checked:SetBlendMode("ADD")
+            checked:SetSize(42, 42)
         end
         checked:Hide()
         tab:SetCheckedTexture(checked)
@@ -1025,6 +952,7 @@ function addonTable:InitSidebarTab()
     self.sidebarTabInitialized = true
 
     self:HookSidebarTabs()
+    self:HookSidebarTabVisibility()
     self:UpdateSidebarLayout()
 end
 
@@ -1070,6 +998,7 @@ function addonTable:HookSidebarTabs()
     if self.sidebarTabsHooked then return end
 
     local function OnBlizzardSidebarTabClicked()
+        if addonTable.isSwitchingTabs then return end
         addonTable:SetSidebarTabSelected(false)
         if addonTable.tabPane then
             addonTable.tabPane:Hide()
@@ -1084,6 +1013,40 @@ function addonTable:HookSidebarTabs()
     if PaperDollSidebarTab3 then PaperDollSidebarTab3:HookScript("OnClick", OnBlizzardSidebarTabClicked) end
 
     self.sidebarTabsHooked = true
+end
+
+function addonTable:HookSidebarTabVisibility()
+    if self.sidebarVisibilityHooked then return end
+
+    local function OnTabVisibilityChanged()
+        addonTable:UpdateSidebarLayout()
+        addonTable:UpdateToggleButtonPosition()
+    end
+
+    if PaperDollSidebarTab1 then
+        PaperDollSidebarTab1:HookScript("OnShow", OnTabVisibilityChanged)
+    end
+    if PaperDollSidebarTab2 then
+        PaperDollSidebarTab2:HookScript("OnShow", OnTabVisibilityChanged)
+    end
+    if PaperDollSidebarTab3 then
+        PaperDollSidebarTab3:HookScript("OnShow", OnTabVisibilityChanged)
+        PaperDollSidebarTab3:HookScript("OnHide", OnTabVisibilityChanged)
+    end
+    if PaperDollFrame then
+        PaperDollFrame:HookScript("OnShow", OnTabVisibilityChanged)
+    end
+    if CharacterFrame then
+        CharacterFrame:HookScript("OnShow", OnTabVisibilityChanged)
+    end
+
+    if PaperDollFrame_UpdateSidebarTabs then
+        hooksecurefunc("PaperDollFrame_UpdateSidebarTabs", function()
+            OnTabVisibilityChanged()
+        end)
+    end
+
+    self.sidebarVisibilityHooked = true
 end
 
 function addonTable:InitBottomTab()
@@ -1165,8 +1128,13 @@ end
 -- Tab Switching & Mutual Exclusivity Logic
 -- =========================================================================
 function addonTable:SelectGearDisplayTab()
+    self.isSwitchingTabs = true
+
     if not CharacterFrame:IsShown() then
-        if InCombatLockdown and InCombatLockdown() then return end
+        if InCombatLockdown and InCombatLockdown() then
+            self.isSwitchingTabs = false
+            return
+        end
         if ToggleCharacter then
             ToggleCharacter("PaperDollFrame")
         elseif ShowUIPanel then
@@ -1174,20 +1142,18 @@ function addonTable:SelectGearDisplayTab()
         end
     end
 
-    -- 1. Uncheck all Blizzard sidebar tabs so none of them retain the "selected" border
-    if PaperDollSidebarTab1 then PaperDollSidebarTab1:SetChecked(false) end
-    if PaperDollSidebarTab2 then PaperDollSidebarTab2:SetChecked(false) end
-    if PaperDollSidebarTab3 then PaperDollSidebarTab3:SetChecked(false) end
+    -- 1. Uncheck all Blizzard sidebar tabs safely so none of them retain the "selected" border
+    for i = 1, 3 do
+        local tab = _G["PaperDollSidebarTab" .. i]
+        if tab and tab.SetChecked then
+            tab:SetChecked(false)
+        end
+    end
 
     -- 2. Check our tab so it displays the selected border
     self:SetSidebarTabSelected(true)
 
-    -- 3. Clear Blizzard's tracking of selected tab
-    if PaperDollFrame then
-        PaperDollFrame.selectedTab = nil
-    end
-
-    -- 4. Hide Blizzard's sidebar panes
+    -- 3. Hide Blizzard's sidebar panes
     if CharacterStatsPane then CharacterStatsPane:Hide() end
     if CharacterStatsPaneScrollBox then CharacterStatsPaneScrollBox:Hide() end
     if CharacterStatsPanePetScrollBox then CharacterStatsPanePetScrollBox:Hide() end
@@ -1196,19 +1162,25 @@ function addonTable:SelectGearDisplayTab()
     if PaperDollTitlesPane then PaperDollTitlesPane:Hide() end
     if PetPaperDollFrameCompanionFrame then PetPaperDollFrameCompanionFrame:Hide() end
 
-    -- 5. Show our tab pane in the character sheet sidebar area
+    -- 4. Show our tab pane in the character sheet sidebar area
     self:CreateTabPane()
     if self.tabPane then
         self.tabPane:Show()
         self:UpdateTabPane("player")
     end
 
-    -- 6. Show surrounding gear tooltips
+    -- 5. Show surrounding gear tooltips
     self:ShowGear("player")
-    PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+    if SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF then
+        PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+    end
+
+    self.isSwitchingTabs = false
 end
 
 function addonTable:SelectStatsTab()
+    self.isSwitchingTabs = true
+
     -- 1. Uncheck our tab
     self:SetSidebarTabSelected(false)
 
@@ -1227,8 +1199,12 @@ function addonTable:SelectStatsTab()
         end
     elseif CharacterStatsPane then
         CharacterStatsPane:Show()
+        if SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF then
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+        end
     end
-    PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF)
+
+    self.isSwitchingTabs = false
 end
 
 function addonTable:ToggleTab()
@@ -1243,6 +1219,7 @@ end
 -- Auto-Centering Mechanism (Zero Taint)
 -- =========================================================================
 function addonTable:CenterCharacterFrame()
+    if InCombatLockdown and InCombatLockdown() then return end
     if self.isCentered or not CharacterFrame then return end
 
     local left = CharacterFrame:GetLeft()
@@ -1262,6 +1239,12 @@ function addonTable:CenterCharacterFrame()
 end
 
 function addonTable:RestoreCharacterFrame()
+    if InCombatLockdown and InCombatLockdown() then
+        self.pendingRestore = true
+        return
+    end
+    self.pendingRestore = false
+
     if not self.isCentered or not CharacterFrame then return end
 
     CharacterFrame:ClearAllPoints()
@@ -1279,6 +1262,54 @@ function addonTable:RestoreCharacterFrame()
 
     self.isCentered = false
     self.savedPoints = {}
+end
+
+function addonTable:CenterInspectFrame()
+    if InCombatLockdown and InCombatLockdown() then return end
+    local targetFrame = InspectFrame
+    if self.isInspectCentered or not targetFrame then return end
+
+    local left = targetFrame:GetLeft()
+    if left and left >= 350 then
+        return
+    end
+
+    self.savedInspectPoints = {}
+    for i = 1, targetFrame:GetNumPoints() do
+        local point, relativeTo, relativePoint, x, y = targetFrame:GetPoint(i)
+        table.insert(self.savedInspectPoints, { point, relativeTo, relativePoint, x, y })
+    end
+
+    targetFrame:ClearAllPoints()
+    targetFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 20)
+    self.isInspectCentered = true
+end
+
+function addonTable:RestoreInspectFrame()
+    if InCombatLockdown and InCombatLockdown() then
+        self.pendingInspectRestore = true
+        return
+    end
+    self.pendingInspectRestore = false
+
+    local targetFrame = InspectFrame
+    if not self.isInspectCentered or not targetFrame then return end
+
+    targetFrame:ClearAllPoints()
+    if #self.savedInspectPoints > 0 then
+        for _, p in ipairs(self.savedInspectPoints) do
+            targetFrame:SetPoint(p[1], p[2], p[3], p[4], p[5])
+        end
+    else
+        targetFrame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 16, -116)
+    end
+
+    if UpdateUIPanelPositions then
+        securecall(UpdateUIPanelPositions)
+    end
+
+    self.isInspectCentered = false
+    self.savedInspectPoints = {}
 end
 
 -- =========================================================================
@@ -1409,30 +1440,7 @@ function addonTable:InitToggleButton()
     self.toggleBtn = btn
     self:UpdateToggleButtonPosition()
     self:HookSidebarTabs()
-
-    -- Hook tab visibility changes so button automatically follows
-    if PaperDollSidebarTab1 then
-        PaperDollSidebarTab1:HookScript("OnShow", function() addonTable:UpdateToggleButtonPosition() end)
-    end
-    if PaperDollSidebarTab2 then
-        PaperDollSidebarTab2:HookScript("OnShow", function() addonTable:UpdateToggleButtonPosition() end)
-    end
-    if PaperDollSidebarTab3 then
-        PaperDollSidebarTab3:HookScript("OnShow", function() addonTable:UpdateToggleButtonPosition() end)
-        PaperDollSidebarTab3:HookScript("OnHide", function() addonTable:UpdateToggleButtonPosition() end)
-    end
-    if PaperDollFrame then
-        PaperDollFrame:HookScript("OnShow", function() addonTable:UpdateToggleButtonPosition() end)
-    end
-    if CharacterFrame then
-        CharacterFrame:HookScript("OnShow", function() addonTable:UpdateToggleButtonPosition() end)
-    end
-
-    if PaperDollFrame_UpdateSidebarTabs then
-        hooksecurefunc("PaperDollFrame_UpdateSidebarTabs", function()
-            addonTable:UpdateToggleButtonPosition()
-        end)
-    end
+    self:HookSidebarTabVisibility()
 end
 
 function addonTable:InitInspectButton()
@@ -1452,6 +1460,9 @@ function addonTable:InitInspectButton()
 
     if InspectFrame then
         InspectFrame:HookScript("OnHide", function()
+            if addonTable.isInspectCentered then
+                addonTable:RestoreInspectFrame()
+            end
             if addonTable.currentUnit == "target" then
                 addonTable:HideGear()
             end
@@ -1512,6 +1523,8 @@ function addonTable:ShowGear(unit)
 
     if unit == "player" and GearDisplayDB.autoCenter then
         self:CenterCharacterFrame()
+    elseif unit == "target" and GearDisplayDB.autoCenter then
+        self:CenterInspectFrame()
     end
 
     self:CreateTooltips()
@@ -1536,12 +1549,20 @@ function addonTable:ShowGear(unit)
     end
 
     self:LayoutTooltips(targetFrame)
+
     self:UpdateButton(true)
     self.isShowing = true
 end
 
 function addonTable:HideGear()
     if not self.isShowing and not (self.tabPane and self.tabPane:IsShown()) then return end
+
+    if self.refreshTimer then
+        if type(self.refreshTimer) == "table" and self.refreshTimer.Cancel then
+            self.refreshTimer:Cancel()
+        end
+        self.refreshTimer = nil
+    end
 
     for _, tt in pairs(self.tooltips) do
         tt:Hide()
@@ -1555,7 +1576,11 @@ function addonTable:HideGear()
 
     self:ClearAllHighlights()
 
-    if self.currentUnit == "player" and GearDisplayDB.autoCenter then
+    if self.isInspectCentered or (self.currentUnit == "target" and GearDisplayDB.autoCenter) then
+        self:RestoreInspectFrame()
+    end
+
+    if self.isCentered or (self.currentUnit == "player" and GearDisplayDB.autoCenter) then
         self:RestoreCharacterFrame()
     end
 
@@ -1591,6 +1616,31 @@ function addonTable:RefreshGear()
     end
 end
 
+function addonTable:RequestRefresh(delay)
+    if self.refreshTimer then return end
+    delay = delay or 0.1
+    if C_Timer and C_Timer.NewTimer then
+        self.refreshTimer = C_Timer.NewTimer(delay, function()
+            self.refreshTimer = nil
+            if self.isShowing then
+                self:RefreshGear()
+            end
+        end)
+    elseif C_Timer and C_Timer.After then
+        self.refreshTimer = true
+        C_Timer.After(delay, function()
+            self.refreshTimer = nil
+            if self.isShowing then
+                self:RefreshGear()
+            end
+        end)
+    else
+        if self.isShowing then
+            self:RefreshGear()
+        end
+    end
+end
+
 -- =========================================================================
 -- Event Handling & Initialization
 -- =========================================================================
@@ -1601,6 +1651,10 @@ eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 eventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 eventFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
 eventFrame:RegisterEvent("UNIT_PET")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:RegisterEvent("INSPECT_READY")
+eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
+eventFrame:RegisterEvent("UPDATE_INVENTORY_DURABILITY")
 
 eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
     if event == "PLAYER_LOGIN" then
@@ -1612,6 +1666,10 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
         addonTable:HookSidebarTabs()
         addonTable:HookSlotButtons()
         addonTable:RegisterSettingsCategory()
+
+        if InspectFrame then
+            addonTable:InitInspectButton()
+        end
 
         if CharacterFrame then
             CharacterFrame:HookScript("OnShow", function()
@@ -1648,6 +1706,14 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
             end)
         end
 
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        if addonTable.pendingRestore then
+            addonTable:RestoreCharacterFrame()
+        end
+        if addonTable.pendingInspectRestore then
+            addonTable:RestoreInspectFrame()
+        end
+
     elseif event == "ADDON_LOADED" then
         if arg1 == "Blizzard_InspectUI" then
             addonTable:InitInspectButton()
@@ -1661,17 +1727,36 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
 
     elseif event == "PLAYER_EQUIPMENT_CHANGED" then
         if addonTable.isShowing and addonTable.currentUnit == "player" then
-            addonTable:RefreshGear()
+            addonTable:RequestRefresh()
         end
 
     elseif event == "UNIT_INVENTORY_CHANGED" then
         if addonTable.isShowing and arg1 == addonTable.currentUnit then
-            addonTable:RefreshGear()
+            addonTable:RequestRefresh()
         end
 
     elseif event == "GET_ITEM_INFO_RECEIVED" then
         if addonTable.isShowing then
-            addonTable:RefreshGear()
+            addonTable:RequestRefresh()
+        end
+
+    elseif event == "UPDATE_INVENTORY_DURABILITY" then
+        if addonTable.isShowing and addonTable.currentUnit == "player" then
+            addonTable:RequestRefresh()
+        end
+
+    elseif event == "INSPECT_READY" then
+        if addonTable.isShowing and addonTable.currentUnit == "target" then
+            if arg1 == nil or arg1 == UnitGUID("target") then
+                addonTable:RequestRefresh()
+            end
+        end
+
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        if addonTable.isShowing and addonTable.currentUnit == "target" then
+            if not UnitExists("target") or not UnitIsPlayer("target") or (InspectFrame and not InspectFrame:IsShown()) then
+                addonTable:HideGear()
+            end
         end
     end
 end)

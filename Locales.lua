@@ -16,14 +16,7 @@ L["BTN_TOOLTIP_TIP_DRESS"] = "• Ctrl-Click any tooltip to preview in Dressing 
 L["BTN_TOOLTIP_TIP_HOVER"] = "• Hovering slots on the character sheet highlights the corresponding tooltip."
 L["BTN_TOOLTIP_TIP_CMD"] = "• Type /gd or /geardisplay for slash commands."
 
--- Header Bar / Tab Pane
-L["HEADER_TITLE"] = "Gear Display"
-L["HEADER_EQUIPPED"] = "Equipped"
-L["HEADER_AVG_ILVL"] = "Avg iLvl"
-L["HEADER_DURABILITY"] = "Durability"
-L["HEADER_SETTINGS_TT"] = "Gear Display Settings"
-L["HEADER_CLOSE_TT"] = "Close Gear Display"
-
+-- Tab Pane
 L["TAB_TITLE"] = "Gear Display"
 L["TAB_SUBTITLE"] = "Equipped Overview & Options"
 L["TAB_REFRESH"] = "Refresh"
@@ -39,8 +32,6 @@ L["CONFIG_QUALITY_BORDERS"] = "Item Quality Borders"
 L["CONFIG_QUALITY_BORDERS_TT"] = "Color each tooltip's border with its item quality color (Epic purple, Rare blue, etc.)."
 L["CONFIG_SHOW_COSMETICS"] = "Show Shirt & Tabard"
 L["CONFIG_SHOW_COSMETICS_TT"] = "Show tooltips for equipped cosmetic slots (Shirt and Tabard)."
-L["CONFIG_SHOW_SUMMARY"] = "Show Summary Header"
-L["CONFIG_SHOW_SUMMARY_TT"] = "Display the top summary bar with Equipped slots, Average Item Level, and Durability."
 L["CONFIG_HIDE_DEFAULT_TT"] = "Suppress Slot Hover Tooltip"
 L["CONFIG_HIDE_DEFAULT_TT_TT"] = "Hide the default single tooltip when hovering over character sheet slots while Gear Display is active."
 L["CONFIG_LAYOUT_LABEL"] = "Layout Mode"
