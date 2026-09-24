@@ -210,6 +210,35 @@ function addonTable:CreateTooltips()
             addonTable:OnTooltipClick(s, slot, button)
         end)
 
+        -- Visual Highlight Indicators
+        -- 1. Outer Radiant Glow Frame (Feathered golden halo)
+        local glow = CreateFrame("Frame", nil, tt, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        glow:SetPoint("TOPLEFT", tt, "TOPLEFT", -7, 7)
+        glow:SetPoint("BOTTOMRIGHT", tt, "BOTTOMRIGHT", 7, -7)
+        glow:SetFrameLevel(tt:GetFrameLevel() + 5)
+        if glow.SetBackdrop then
+            glow:SetBackdrop({
+                edgeFile = "Interface\\TutorialFrame\\UI-TutorialFrame-CalloutGlow",
+                edgeSize = 10,
+                tileEdge = false,
+            })
+            glow:SetBackdropBorderColor(1.0, 0.85, 0.1, 1.0)
+        end
+        glow:Hide()
+        tt.HoverGlow = glow
+
+        -- Pulse Animation for Glow
+        if glow.CreateAnimationGroup then
+            local anim = glow:CreateAnimationGroup()
+            anim:SetLooping("BOUNCE")
+            local alpha = anim:CreateAnimation("Alpha")
+            alpha:SetFromAlpha(0.65)
+            alpha:SetToAlpha(1.0)
+            alpha:SetDuration(0.5)
+            alpha:SetSmoothing("IN_OUT")
+            glow.pulseAnim = anim
+        end
+
         self.tooltips[slot.id] = tt
     end
 
@@ -234,31 +263,83 @@ function addonTable:OnTooltipClick(tooltip, slot, button)
     end
 end
 
-function addonTable:OnTooltipEnter(tooltip, slot)
-    -- Highlight character sheet slot button
+function addonTable:HighlightSlotButton(slot, isHighlighted)
     local slotBtn = GetSlotButton(slot, self.currentUnit)
-    if slotBtn and slotBtn.LockHighlight then
-        slotBtn:LockHighlight()
-    end
+    if not slotBtn then return end
 
-    -- Bright gold border highlight
-    if tooltip.SetBackdropBorderColor then
-        tooltip:SetBackdropBorderColor(1.0, 0.85, 0.1, 1.0)
-    end
-    if tooltip.NineSlice and tooltip.NineSlice.SetBorderColor then
-        tooltip.NineSlice:SetBorderColor(1.0, 0.85, 0.1, 1.0)
+    if isHighlighted then
+        if slotBtn.LockHighlight then
+            slotBtn:LockHighlight()
+        end
+        if not slotBtn.GearDisplayGlow then
+            local g = slotBtn:CreateTexture(nil, "OVERLAY")
+            g:SetPoint("TOPLEFT", slotBtn, "TOPLEFT", -3, 3)
+            g:SetPoint("BOTTOMRIGHT", slotBtn, "BOTTOMRIGHT", 3, -3)
+            g:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+            g:SetBlendMode("ADD")
+            g:SetVertexColor(1.0, 0.85, 0.1, 1.0)
+            slotBtn.GearDisplayGlow = g
+        end
+        slotBtn.GearDisplayGlow:Show()
+    else
+        if slotBtn.UnlockHighlight then
+            slotBtn:UnlockHighlight()
+        end
+        if slotBtn.GearDisplayGlow then
+            slotBtn.GearDisplayGlow:Hide()
+        end
     end
 end
 
-function addonTable:OnTooltipLeave(tooltip, slot)
-    -- Unlock character sheet slot button highlight
-    local slotBtn = GetSlotButton(slot, self.currentUnit)
-    if slotBtn and slotBtn.UnlockHighlight then
-        slotBtn:UnlockHighlight()
-    end
+function addonTable:SetTooltipHighlight(tooltip, isHighlighted, slotId)
+    if not tooltip then return end
 
-    -- Restore normal border
-    self:UpdateTooltipBorder(tooltip, slot.id, self.currentUnit)
+    if isHighlighted then
+        if tooltip.HoverGlow then
+            tooltip.HoverGlow:Show()
+            if tooltip.HoverGlow.pulseAnim then
+                tooltip.HoverGlow.pulseAnim:Play()
+            end
+        end
+        if tooltip.ThickBorder then
+            tooltip.ThickBorder:Show()
+        end
+        if tooltip.TopAccent then
+            tooltip.TopAccent:Show()
+        end
+        if tooltip.SetBackdropBorderColor then
+            tooltip:SetBackdropBorderColor(1.0, 0.85, 0.1, 1.0)
+        end
+        if tooltip.NineSlice and tooltip.NineSlice.SetBorderColor then
+            tooltip.NineSlice:SetBorderColor(1.0, 0.85, 0.1, 1.0)
+        end
+    else
+        if tooltip.HoverGlow then
+            if tooltip.HoverGlow.pulseAnim then
+                tooltip.HoverGlow.pulseAnim:Stop()
+            end
+            tooltip.HoverGlow:Hide()
+        end
+        if tooltip.ThickBorder then
+            tooltip.ThickBorder:Hide()
+        end
+        if tooltip.TopAccent then
+            tooltip.TopAccent:Hide()
+        end
+        if slotId then
+            self:UpdateTooltipBorder(tooltip, slotId, self.currentUnit)
+        end
+    end
+end
+
+function addonTable:OnTooltipEnter(tooltip, slot)
+    self:HighlightSlotButton(slot, true)
+    self:SetTooltipHighlight(tooltip, true, slot.id)
+end
+
+function addonTable:OnTooltipLeave(tooltip, slot)
+    self:HighlightSlotButton(slot, false)
+    self:SetTooltipHighlight(tooltip, false, slot.id)
 end
 
 function addonTable:PopulateTooltip(tooltip, slotId, unit)
@@ -343,6 +424,7 @@ function addonTable:HookSlotButtons()
         if slotBtn then
             slotBtn:HookScript("OnEnter", function()
                 if addonTable.isShowing and addonTable.currentUnit == "player" then
+                    addonTable:HighlightSlotButton(slot, true)
                     addonTable:HighlightSlotTooltip(slot.id, true)
                     if GearDisplayDB.hideDefaultTooltipOnHover then
                         GameTooltip:Hide()
@@ -351,6 +433,7 @@ function addonTable:HookSlotButtons()
             end)
             slotBtn:HookScript("OnLeave", function()
                 if addonTable.isShowing and addonTable.currentUnit == "player" then
+                    addonTable:HighlightSlotButton(slot, false)
                     addonTable:HighlightSlotTooltip(slot.id, false)
                 end
             end)
@@ -368,6 +451,7 @@ function addonTable:HookInspectSlotButtons()
         if slotBtn then
             slotBtn:HookScript("OnEnter", function()
                 if addonTable.isShowing and addonTable.currentUnit == "target" then
+                    addonTable:HighlightSlotButton(slot, true)
                     addonTable:HighlightSlotTooltip(slot.id, true)
                     if GearDisplayDB.hideDefaultTooltipOnHover then
                         GameTooltip:Hide()
@@ -376,6 +460,7 @@ function addonTable:HookInspectSlotButtons()
             end)
             slotBtn:HookScript("OnLeave", function()
                 if addonTable.isShowing and addonTable.currentUnit == "target" then
+                    addonTable:HighlightSlotButton(slot, false)
                     addonTable:HighlightSlotTooltip(slot.id, false)
                 end
             end)
@@ -388,24 +473,16 @@ end
 function addonTable:HighlightSlotTooltip(slotId, isHighlighted)
     local tt = self.tooltips[slotId]
     if tt and tt:IsShown() then
-        if isHighlighted then
-            if tt.SetBackdropBorderColor then
-                tt:SetBackdropBorderColor(1.0, 0.85, 0.1, 1.0)
-            end
-            if tt.NineSlice and tt.NineSlice.SetBorderColor then
-                tt.NineSlice:SetBorderColor(1.0, 0.85, 0.1, 1.0)
-            end
-        else
-            self:UpdateTooltipBorder(tt, slotId, self.currentUnit)
-        end
+        self:SetTooltipHighlight(tt, isHighlighted, slotId)
     end
 end
 
 function addonTable:ClearAllHighlights()
     for _, slot in ipairs(SLOTS_DATA) do
-        local slotBtn = GetSlotButton(slot, self.currentUnit)
-        if slotBtn and slotBtn.UnlockHighlight then
-            slotBtn:UnlockHighlight()
+        self:HighlightSlotButton(slot, false)
+        local tt = self.tooltips[slot.id]
+        if tt then
+            self:SetTooltipHighlight(tt, false, slot.id)
         end
     end
 end

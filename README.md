@@ -38,9 +38,9 @@
     - *Bottom Row:* Weapons, off-hands, shields, and ranged relics centered directly below your character model.
   - **Single Column Mode:**
     - Clean single-column layout flanking each side of the Character Sheet, ideal for narrower displays or ultra-wide setups.
-- **Bi-Directional Hover Highlighting:**
-  - Hovering a slot button on your character sheet illuminates the corresponding surrounding tooltip with a bright gold glow.
-  - Hovering a surrounding gear tooltip illuminates the corresponding equipment slot button on the character sheet.
+- **High-Visibility Bi-Directional Hover Highlighting:**
+  - Hovering a slot button on your character sheet activates a **substantially thicker ornate gold border**, a **luminous pulsing golden halo** around the entire corresponding tooltip, and an **illuminated gold header stripe**, making the active item instantly pop out across your screen.
+  - Hovering a surrounding gear tooltip illuminates the corresponding equipment slot button on the character sheet with an **authentic radiant gold action-button glow**.
   - *Suppress Slot Hover* option hides redundant default slot tooltips while GearDisplay is open to prevent visual clutter.
 - **Interactive Controls:**
   - **Shift + Click** any gear tooltip to instantly insert its item link into chat.
