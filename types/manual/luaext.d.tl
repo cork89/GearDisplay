@@ -56,3 +56,7 @@ global record bit
 end
 
 -- Misc (geterrorhandler, seterrorhandler, issecurevariable come from the generated API)
+
+-- Lua 5.1 `unpack`. Do NOT use `table.unpack` in Teal code: with gen_target 5.1 and
+-- gen_compat off, tl emits it unchanged and it does not exist in WoW.
+global unpack: function<T>(list: {T}, i?: number, j?: number): T...

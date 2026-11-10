@@ -12,7 +12,8 @@ types/
   generated/REPORT.md        what the generator couldn't resolve (worth reading)
   manual/core.d.tl           CreateFrame overloads, hooksecurefunc, legacy item API
   manual/framexml.d.tl       Blizzard UI Lua (ShowUIPanel, Settings, Backdrop, named frames)
-  manual/luaext.d.tl         WoW additions to the Lua stdlib (strsplit, wipe, tinsert, bit, ...)
+  manual/luaext.d.tl         WoW additions to the Lua stdlib (strsplit, wipe, tinsert, bit, unpack, ...)
+  manual/globalstrings.d.tl  Blizzard GlobalStrings we use (INVTYPE_*); add more as needed
   gen/build.tl, build.sh     generator + pinned sources
   tests/                     smoke.tl (must pass), expect_errors.tl (must fail exactly where marked)
   check.sh                   type-checks everything above
@@ -45,7 +46,8 @@ To update to a new client build, bump `UI_SOURCE_REF` (Gethe/wow-ui-source, `for
 ## Teal gotchas that shaped the layout
 
 - **Types and global values share one namespace.** `GameTooltip` is both a widget class and a frame,
-  so it is a `record` (records are both). For the same reason a Blizzard enum alias whose name is
+  so it is a `record` (records are both). Records can't be extended, so its methods live in
+  `interface GameTooltipAPI`; extend that for tooltips with extra fields (`local interface MyTip is GameTooltipAPI`). For the same reason a Blizzard enum alias whose name is
   also a function (`UnitSex`) is not emitted.
 - **`global type A = B` cannot refer to a type declared later**, not even with a forward declaration.
   Record and interface *fields* can. So aliases are inlined where they are used and emitted at the end.

@@ -18481,7 +18481,7 @@ global interface Checkout is Frame
    SetFocus: function(self)
    SetZoom: function(self, zoomLevel: number)
 end
-global record GameTooltip is Frame
+global interface GameTooltipAPI is Frame
    AddFontStrings: function(self, leftFontString: FontString, rightFontString: FontString)
    -- Set all padding values to 0.0 and remove the Padding SecretAspect.
    ClearPadding: function(self)
@@ -18713,6 +18713,7 @@ global record GameTooltip is Frame
    -- (Ketho)
    SetWeeklyReward: function(self, itemDBID: any)
 end
+global record GameTooltip is GameTooltipAPI end
 global interface FogOfWarFrame is Frame
    GetFogOfWarBackgroundAtlas: function(self): string
    -- [nilable: asset]

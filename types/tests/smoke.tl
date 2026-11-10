@@ -80,3 +80,26 @@ print(a, bpart, format("%d", 1), wipe({}))
 
 local bd = CreateFrame("Frame", nil, f, "BackdropTemplate") as BackdropFrame
 bd:SetBackdropBorderColor(1, 1, 1, 1)
+
+-- Slash commands, sounds, global strings, unpack
+global SLASH_SMOKE1: string
+SLASH_SMOKE1 = "/smoke"
+SlashCmdList["SMOKE"] = function(msg: string) print(msg) end
+PlaySound(SOUNDKIT["IG_MAINMENU_OPTION_CHECKBOX_OFF"])
+print(INVTYPE_HEAD, unpack({ 1, 2 }))
+
+-- Cross-file namespace pattern and casts used by the GearDisplay port
+local G = _G as {string:any}
+G["Smoke"] = ns
+local slotBtn = G["CharacterHeadSlot"] as Button
+if slotBtn then slotBtn:LockHighlight() end
+local interface LabeledCheck is CheckButton
+   Text: FontString
+end
+local lc = CreateFrame("CheckButton", nil, f, "InterfaceOptionsCheckButtonTemplate") as LabeledCheck
+lc.Text:SetText("label")
+local type CreateButtonFn = function(frameType: string, name: string, parent: Frame, template: string): Button
+local okTab, newTab = pcall(CreateFrame as CreateButtonFn, "Button", "SmokeTab", CharacterFrame, "PanelTabButtonTemplate")
+if okTab then PanelTemplates_TabResize(newTab, 0) end
+local alpha = f:CreateAnimationGroup():CreateAnimation("Alpha") as Alpha
+alpha:SetFromAlpha(0)

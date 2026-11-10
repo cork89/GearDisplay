@@ -7,3 +7,4 @@ require("types.generated.wow_api")   -- GENERATED: tl run types/gen/build.tl
 require("types.manual.core")         -- CreateFrame, hooksecurefunc, legacy item API
 require("types.manual.framexml")     -- Blizzard UI Lua functions, named frames
 require("types.manual.luaext")       -- WoW additions to the Lua stdlib
+require("types.manual.globalstrings") -- Blizzard GlobalStrings used by our addons

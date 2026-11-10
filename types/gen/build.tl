@@ -903,7 +903,9 @@ for _, file in ipairs(list_lua_files(KETHO .. "/Widget")) do
    end
 end
 for _, cls in ipairs(WIDGETS) do
-   local header = (cls.is_record and "global record " or "global interface ") .. cls.name
+   -- A record class is emitted as `interface <Name>API` (all methods; addons can
+   -- extend it) followed by `record <Name> is <Name>API end` (the type + value).
+   local header = "global interface " .. (cls.is_record and (cls.name .. "API") or cls.name)
    if #cls.parents > 0 then header = header .. " is " .. table.concat(cls.parents, ", ") end
    w(header)
    declared_methods[cls.name] = {}
@@ -964,6 +966,9 @@ for _, cls in ipairs(WIDGETS) do
       end
    end
    w("end")
+   if cls.is_record then
+      w("global record " .. cls.name .. " is " .. cls.name .. "API end")
+   end
 end
 local unused_api: {string} = {}
 for name in pairs(widget_api) do

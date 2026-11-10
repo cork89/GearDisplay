@@ -102,3 +102,13 @@ global PaperDollItemsFrame: Frame
 global InspectFrame: Frame
 global InspectPaperDollFrame: Frame
 global InspectPaperDollItemsFrame: Frame
+
+--------------------------------------------------------------------------------
+-- Slash commands and sounds
+-- Register with: `SLASH_MYADDON1 = "/my"` (declare `global SLASH_MYADDON1: string`
+-- in the addon) and `SlashCmdList["MYADDON"] = function(msg) ... end`.
+--------------------------------------------------------------------------------
+
+global SlashCmdList: {string: function(msg: string, editBox: EditBox)}
+-- SoundKitConstants.lua: name -> soundKitID
+global SOUNDKIT: {string: number}
