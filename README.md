@@ -82,15 +82,20 @@
 ## Building from source
 
 The addon is written in [Teal](https://github.com/teal-language/tl) (typed Lua). The `.tl` files are the
-source; the `.lua` files next to them are generated and committed, and are what the game loads.
+source. `build.sh` compiles them to `dist/*.lua`, which `GearDisplay.toc` loads. `dist/` is gitignored:
+build it locally to play from a checkout. CI builds it for releases.
 
 ```sh
-sh build.sh          # type-check and regenerate Locales.lua, Config.lua, GearDisplay.lua
+sh build.sh          # type-check and write dist/Locales.lua, dist/Config.lua, dist/GearDisplay.lua
 sh types/check.sh    # type-check the WoW API declarations
 ```
 
-Needs `tl` 0.24.8 on PATH. Edit the `.tl` files, not the `.lua`. Addon-wide types live in
-`GearDisplayTypes.d.tl`; WoW API types live in `types/` (see `types/README.md`).
+Needs `tl` 0.24.8 on PATH. Addon-wide types live in `GearDisplayTypes.d.tl`; WoW API types live in
+`types/` (see `types/README.md`).
+
+Releases (`.github/workflows/release.yml`) run `build.sh` and then `git add -f dist`. That step is
+required: the BigWigs packager leaves untracked files out of the package. `types.yml` does the same with
+a packaging dry run on every push and PR and checks that the package contains the built `.lua` files.
 
 ---
 

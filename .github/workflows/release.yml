@@ -19,6 +19,18 @@ jobs:
         with:
           fetch-depth: 0 # REQUIRED: Packager needs complete git history to detect tags & build changelogs
 
+      - name: Set up Teal
+        uses: ./.github/actions/setup-tl
+
+      # Type errors fail the job here, so nothing broken gets released.
+      - name: Build addon
+        run: sh build.sh
+
+      # The packager leaves out untracked and gitignored files (git ls-files --others),
+      # so stage the generated dist/ to get it into the package. Nothing is committed.
+      - name: Stage build output for the packager
+        run: git add -f dist
+
       - name: Package and Release
         uses: BigWigsMods/packager@v2
         env:
