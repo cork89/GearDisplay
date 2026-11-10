@@ -1,5 +1,5 @@
 package-as: GearDisplay
-    
+
 license-output: LICENSE
 
 ignore:
@@ -7,3 +7,7 @@ ignore:
     - .github
     - AGENTS.md
     - "*.ps1"
+    - explore
+    - types
+    - tlconfig.lua
+    - "*.tl"

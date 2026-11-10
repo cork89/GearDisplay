@@ -1,0 +1,38 @@
+name: Types
+
+on:
+  push:
+    branches: [main, beta]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: "5.4"
+
+      - uses: leafo/gh-actions-luarocks@v4
+
+      - name: Install Teal
+        run: luarocks install tl 0.24.8
+
+      - name: Generated declarations are up to date
+        run: |
+          sh types/gen/build.sh
+          git diff --exit-code -- types/generated || {
+            echo "::error::types/generated is stale; run types/gen/build.sh and commit the result"
+            exit 1
+          }
+
+      - name: Declarations and tests type-check
+        run: sh types/check.sh
+
+      # Lax checking of the plain-Lua addon is informational until the Teal port
+      # (see explore/teal-types-plan.md); most remaining errors need `.tl` casts.
+      - name: Lax-check addon Lua (informational)
+        continue-on-error: true
+        run: tl check Locales.lua Config.lua GearDisplay.lua
