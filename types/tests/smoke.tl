@@ -103,3 +103,15 @@ local okTab, newTab = pcall(CreateFrame as CreateButtonFn, "Button", "SmokeTab",
 if okTab then PanelTemplates_TabResize(newTab, 0) end
 local alpha = f:CreateAnimationGroup():CreateAnimation("Alpha") as Alpha
 alpha:SetFromAlpha(0)
+
+-- Character sheet frames and FrameXML helpers used by GearDisplay
+if PaperDollSidebarTabs and PaperDollSidebarTab1 then PaperDollSidebarTab1:HookScript("OnClick", function() end) end
+if CharacterStatsPane then CharacterStatsPane:Hide() end
+if CharacterStatsPaneScrollBox then CharacterStatsPaneScrollBox:Hide() end
+if CharacterStatsPanePetScrollBox then CharacterStatsPanePetScrollBox:Hide() end
+if CharacterFrameTab1 then CharacterFrameTab1:HookScript("OnClick", function() end) end
+if UpdateUIPanelPositions then securecall(UpdateUIPanelPositions) end
+hooksecurefunc("PaperDollFrame_UpdateSidebarTabs", function() end)
+if PaperDollFrame_UpdateSidebarTabs then PaperDollFrame_UpdateSidebarTabs() end
+fs:SetFontObject(GameFontHighlightSmall)
+category.ID = "Smoke"

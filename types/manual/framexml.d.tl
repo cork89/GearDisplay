@@ -15,6 +15,12 @@ global UISpecialFrames: {string}
 -- Blizzard_UIPanels_Game/CharacterFrame.lua
 global ToggleCharacter: function(tab: string, onlyShow?: boolean)
 
+-- Blizzard_UIParentPanelManager/Shared/UIParentPanelManager.lua
+global UpdateUIPanelPositions: function(currentFrame?: Frame)
+
+-- Blizzard_UIPanels_Game/{Mainline,Camelot}/PaperDollFrame.lua
+global PaperDollFrame_UpdateSidebarTabs: function()
+
 -- Blizzard_SharedXML/PanelTemplates.lua
 global PanelTemplates_TabResize: function(tab: Button, padding?: number, absoluteSize?: number, minWidth?: number, maxWidth?: number, absoluteTextSize?: number)
 
@@ -34,7 +40,9 @@ global ChatEdit_InsertLink: function(text: string): boolean
 --------------------------------------------------------------------------------
 
 global record SettingsCategory
-   ID: integer
+   -- An integer from idCounter(); addons commonly overwrite it with their name so
+   -- Settings.OpenToCategory(name) works.
+   ID: integer | string
    GetID: function(self): integer
    GetName: function(self): string
 end
@@ -98,6 +106,22 @@ global CharacterFrame: Frame
 global PaperDollFrame: Frame
 global PaperDollItemsFrame: Frame
 
+-- Blizzard_UIPanels_Game/{Mainline,Camelot}/PaperDollFrame.xml. The tabs are CheckButtons on
+-- Camelot and Buttons on Mainline.
+global PaperDollSidebarTabs: Frame
+global PaperDollSidebarTab1: Button
+global PaperDollSidebarTab2: Button
+global PaperDollSidebarTab3: Button
+
+-- Blizzard_UIPanels_Game/{Mainline,Camelot}/CharacterFrame.xml
+global CharacterStatsPane: Frame
+global CharacterStatsPaneScrollBox: Frame
+global CharacterStatsPanePetScrollBox: Frame
+-- Mainline/CharacterFrame.xml bottom tabs; nil on Camelot (it uses CharacterFrame.ModeTabs).
+global CharacterFrameTab1: Button
+global CharacterFrameTab2: Button
+global CharacterFrameTab3: Button
+
 -- Load-on-demand (Blizzard_InspectUI); nil until loaded.
 global InspectFrame: Frame
 global InspectPaperDollFrame: Frame
@@ -112,3 +136,12 @@ global InspectPaperDollItemsFrame: Frame
 global SlashCmdList: {string: function(msg: string, editBox: EditBox)}
 -- SoundKitConstants.lua: name -> soundKitID
 global SOUNDKIT: {string: number}
+
+--------------------------------------------------------------------------------
+-- Font objects (Blizzard_Fonts_Shared/Shared/FontStyles.xml)
+--------------------------------------------------------------------------------
+
+global GameFontNormal: Font
+global GameFontNormalLarge: Font
+global GameFontHighlight: Font
+global GameFontHighlightSmall: Font

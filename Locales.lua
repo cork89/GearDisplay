@@ -1,10 +1,12 @@
+
 local addonName, addonTable = ...
-_G[addonName] = addonTable
+local G = _G
+G[addonName] = addonTable
 
 local L = {}
 addonTable.L = L
 
--- English / Default strings
+
 L["ADDON_TITLE"] = "Gear Display"
 L["SHOW_GEAR"] = "Show Gear"
 L["HIDE_GEAR"] = "Hide Gear"
@@ -16,7 +18,7 @@ L["BTN_TOOLTIP_TIP_DRESS"] = "• Ctrl-Click any tooltip to preview in Dressing 
 L["BTN_TOOLTIP_TIP_HOVER"] = "• Hovering slots on the character sheet highlights the corresponding tooltip."
 L["BTN_TOOLTIP_TIP_CMD"] = "• Type /gd or /geardisplay for slash commands."
 
--- Tab Pane
+
 L["TAB_TITLE"] = "Gear Display"
 L["TAB_SUBTITLE"] = "Equipped Overview & Options"
 L["TAB_REFRESH"] = "Refresh"
@@ -24,7 +26,7 @@ L["TAB_HIDE"] = "Hide Gear"
 L["TAB_ITEMS_HEADER"] = "Equipped Items"
 L["TAB_NO_ITEMS"] = "No items equipped"
 
--- Options Window
+
 L["CONFIG_TITLE"] = "Gear Display Options"
 L["CONFIG_AUTO_CENTER"] = "Auto-Center Character Sheet"
 L["CONFIG_AUTO_CENTER_TT"] = "Automatically center the character sheet when displaying gear so left and right tooltips fit comfortably on screen."
@@ -44,7 +46,7 @@ L["CONFIG_SCALE_TT"] = "Adjust the size of the surrounding gear tooltips."
 L["CONFIG_RESET_DEFAULTS"] = "Reset Defaults"
 L["CONFIG_CLOSE"] = "Close"
 
--- Slash Commands
+
 L["CMD_HELP_HEADER"] = "Gear Display Commands:"
 L["CMD_HELP_TOGGLE"] = "  /gd - Toggle gear display"
 L["CMD_HELP_AUTOCENTER"] = "  /gd autocenter - Toggle auto-centering"

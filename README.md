@@ -79,6 +79,21 @@
 
 ---
 
+## Building from source
+
+The addon is written in [Teal](https://github.com/teal-language/tl) (typed Lua). The `.tl` files are the
+source; the `.lua` files next to them are generated and committed, and are what the game loads.
+
+```sh
+sh build.sh          # type-check and regenerate Locales.lua, Config.lua, GearDisplay.lua
+sh types/check.sh    # type-check the WoW API declarations
+```
+
+Needs `tl` 0.24.8 on PATH. Edit the `.tl` files, not the `.lua`. Addon-wide types live in
+`GearDisplayTypes.d.tl`; WoW API types live in `types/` (see `types/README.md`).
+
+---
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).

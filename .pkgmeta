@@ -11,3 +11,4 @@ ignore:
     - types
     - tlconfig.lua
     - "*.tl"
+    - build.sh

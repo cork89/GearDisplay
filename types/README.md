@@ -26,7 +26,7 @@ types/
 sh types/gen/build.sh   # regenerate (fetches pinned sources into types/.cache)
 sh types/gen/build.sh <wow-ui-source> <vscode-wow-api>   # or use local checkouts
 sh types/check.sh       # declarations + smoke tests
-tl check GearDisplay.lua   # lax-check plain Lua against the WoW globals
+sh build.sh              # type-check the addon (.tl) and regenerate its .lua
 ```
 
 To update to a new client build, bump `UI_SOURCE_REF` (Gethe/wow-ui-source, `forever` branch) or
