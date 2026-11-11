@@ -1,5 +1,12 @@
-local addonName, addonTable = ...
+local type GD = require("GearDisplayTypes")
+local _addonName, addonTable = ... as (string, GD.Namespace)
 local L = addonTable.L
+
+global GearDisplayDB: GD.DB
+local G = _G as {string:any}
+
+-- pcall(CreateFrame, "Button", ...) can't pick the Button overload by itself.
+local type CreateButtonFn = function(frameType: string, name: string, parent: Frame, template: string): Button
 
 addonTable.tooltips = {}
 addonTable.isShowing = false
@@ -15,7 +22,7 @@ addonTable.slotGlows = addonTable.slotGlows or {}
 -- =========================================================================
 -- Safe Modern API Wrappers (Supports Modern Mainline / WoW Forever & Classic)
 -- =========================================================================
-local function SafeGetItemInfo(item)
+local function SafeGetItemInfo(item: string): string, string, number, number, number, string, string, number, string, number, number, number, number, number, number, number, boolean, string
     if not item then return nil end
     if C_Item and C_Item.GetItemInfo then
         return C_Item.GetItemInfo(item)
@@ -25,29 +32,33 @@ local function SafeGetItemInfo(item)
     return nil
 end
 
-local function SafeGetInventoryItemLink(unit, slotId)
+-- C_Item functions that some clients have and Forever doesn't.
+local C_ItemCompat = C_Item as {string:any}
+
+local function SafeGetInventoryItemLink(unit: string, slotId: number): string
     if GetInventoryItemLink then
         local link = GetInventoryItemLink(unit, slotId)
         if link then return link end
     end
-    if C_Item and C_Item.GetInventoryItemLink then
-        local ok, link = pcall(C_Item.GetInventoryItemLink, unit, slotId)
-        if ok and link then return link end
+    if C_Item and C_ItemCompat["GetInventoryItemLink"] then
+        local ok, link = pcall(C_ItemCompat["GetInventoryItemLink"] as (function(string, number): string), unit, slotId)
+        if ok and link then return link as string end
     end
     if unit == "player" and ItemLocation and ItemLocation.CreateFromEquipmentSlot and C_Item and C_Item.GetItemLink then
-        local ok, loc = pcall(ItemLocation.CreateFromEquipmentSlot, ItemLocation, slotId)
+        local ok, res = pcall(ItemLocation.CreateFromEquipmentSlot, ItemLocation, slotId)
+        local loc = res as ItemLocation
         if ok and loc and loc:IsValid() and C_Item.DoesItemExist(loc) then
             local ok2, link = pcall(C_Item.GetItemLink, loc)
-            if ok2 and link then return link end
+            if ok2 and link then return link as string end
         end
     end
     return nil
 end
 
-local function SafeGetItemQuality(unit, slotId, itemLink)
+local function SafeGetItemQuality(unit: string, slotId: number, itemLink: string): number
     -- 1. Try C_Item / GetInventoryItemQuality
-    if C_Item and C_Item.GetInventoryItemQuality then
-        local q = C_Item.GetInventoryItemQuality(unit, slotId)
+    if C_Item and C_ItemCompat["GetInventoryItemQuality"] then
+        local q = (C_ItemCompat["GetInventoryItemQuality"] as function(string, number): number)(unit, slotId)
         if q ~= nil then return q end
     elseif GetInventoryItemQuality then
         local q = GetInventoryItemQuality(unit, slotId)
@@ -62,7 +73,7 @@ local function SafeGetItemQuality(unit, slotId, itemLink)
 
     -- 3. Try SafeGetItemInfo
     if itemLink then
-        local q = select(3, SafeGetItemInfo(itemLink))
+        local q = select(3, SafeGetItemInfo(itemLink)) as number
         if q ~= nil then return q end
 
         -- 4. Extract from link color hex |cffRRGGBB
@@ -83,16 +94,18 @@ local function SafeGetItemQuality(unit, slotId, itemLink)
     return nil
 end
 
-local function SafeGetItemQualityColor(quality, itemLink)
+local function SafeGetItemQualityColor(quality: number, itemLink: string): number, number, number
     if quality ~= nil then
         if C_Item and C_Item.GetItemQualityColor then
-            local res1, res2, res3 = C_Item.GetItemQualityColor(quality)
-            if type(res1) == "table" and res1.r and res1.g and res1.b then
-                return res1.r, res1.g, res1.b
+            -- Some clients return a color table instead of r, g, b.
+            local res1, res2, res3 = (C_Item.GetItemQualityColor as function(number): (any, any, any))(quality)
+            if type(res1) == "table" and (res1 as ColorMixin).r and (res1 as ColorMixin).g and (res1 as ColorMixin).b then
+                return (res1 as ColorMixin).r, (res1 as ColorMixin).g, (res1 as ColorMixin).b
             elseif type(res1) == "number" and type(res2) == "number" and type(res3) == "number" then
-                return res1, res2, res3
+                return res1 as number, res2 as number, res3 as number
             end
         end
+        local GetItemQualityColor = G["GetItemQualityColor"] as function(number): number, number, number
         if GetItemQualityColor then
             local r, g, b = GetItemQualityColor(quality)
             if r and g and b then return r, g, b end
@@ -118,7 +131,7 @@ end
 -- =========================================================================
 -- Slot Definitions & Button Lookup
 -- =========================================================================
-local SLOTS_DATA = {
+local SLOTS_DATA: {GD.SlotData} = {
     -- Left Inner Column (adjacent to left edge of CharacterFrame)
     { id = 1,  key = "HEAD",      name = INVTYPE_HEAD or "Head",             slotName = "HeadSlot",          btn = "CharacterHeadSlot",          inspectBtn = "InspectHeadSlot",          group = "LEFT_INNER",  order = 1 },
     { id = 2,  key = "NECK",      name = INVTYPE_NECK or "Neck",             slotName = "NeckSlot",          btn = "CharacterNeckSlot",          inspectBtn = "InspectNeckSlot",          group = "LEFT_INNER",  order = 2 },
@@ -150,19 +163,19 @@ local SLOTS_DATA = {
 }
 addonTable.SLOTS_DATA = SLOTS_DATA
 
-local function GetSlotButton(slot, unit)
+local function GetSlotButton(slot: GD.SlotData, unit: string): Button
     local isInspect = (unit == "target")
     local globalName = isInspect and slot.inspectBtn or slot.btn
-    local btn = _G[globalName]
+    local btn = G[globalName] as Button
     if btn then return btn end
 
     -- Modern Mainline PaperDollItemsFrame hierarchy
     if not isInspect and PaperDollItemsFrame and slot.slotName then
-        btn = PaperDollItemsFrame[slot.slotName]
+        btn = (PaperDollItemsFrame as {string:any})[slot.slotName] as Button
         if btn then return btn end
     end
     if isInspect and InspectPaperDollItemsFrame and slot.slotName then
-        btn = InspectPaperDollItemsFrame[slot.slotName]
+        btn = (InspectPaperDollItemsFrame as {string:any})[slot.slotName] as Button
         if btn then return btn end
     end
     return nil
@@ -178,7 +191,7 @@ function addonTable:CreateTooltips()
 
     for _, slot in ipairs(SLOTS_DATA) do
         local ttName = "GearDisplayTooltip" .. slot.id
-        local tt = CreateFrame("GameTooltip", ttName, UIParent, template)
+        local tt = CreateFrame("GameTooltip", ttName, UIParent, template) as GD.GearTooltip
         tt:SetScript("OnUpdate", nil)
         tt:SetFrameStrata("DIALOG")
         tt:SetFrameLevel(100)
@@ -186,21 +199,21 @@ function addonTable:CreateTooltips()
         tt:EnableMouse(true)
 
         -- Interaction
-        tt:SetScript("OnEnter", function(s)
+        tt:SetScript("OnEnter", function(s: GD.GearTooltip)
             addonTable:OnTooltipEnter(s, slot)
         end)
 
-        tt:SetScript("OnLeave", function(s)
+        tt:SetScript("OnLeave", function(s: GD.GearTooltip)
             addonTable:OnTooltipLeave(s, slot)
         end)
 
-        tt:SetScript("OnMouseDown", function(s, button)
+        tt:SetScript("OnMouseDown", function(s: GD.GearTooltip, button: string)
             addonTable:OnTooltipClick(s, slot, button)
         end)
 
         -- Visual Highlight Indicators
         -- 1. Outer Radiant Glow Frame (Feathered golden halo)
-        local glow = CreateFrame("Frame", nil, tt, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        local glow = CreateFrame("Frame", nil, tt, BackdropTemplateMixin and "BackdropTemplate" or nil) as GD.GlowFrame
         glow:SetPoint("TOPLEFT", tt, "TOPLEFT", -7, 7)
         glow:SetPoint("BOTTOMRIGHT", tt, "BOTTOMRIGHT", 7, -7)
         glow:SetFrameLevel(tt:GetFrameLevel() + 5)
@@ -219,7 +232,7 @@ function addonTable:CreateTooltips()
         if glow.CreateAnimationGroup then
             local anim = glow:CreateAnimationGroup()
             anim:SetLooping("BOUNCE")
-            local alpha = anim:CreateAnimation("Alpha")
+            local alpha = anim:CreateAnimation("Alpha") as Alpha
             alpha:SetFromAlpha(0.65)
             alpha:SetToAlpha(1.0)
             alpha:SetDuration(0.5)
@@ -233,7 +246,7 @@ function addonTable:CreateTooltips()
     self.tooltipsCreated = true
 end
 
-function addonTable:OnTooltipClick(tooltip, slot, button)
+function addonTable:OnTooltipClick(tooltip: GD.GearTooltip, _slot: GD.SlotData, button: string)
     if not tooltip.itemLink then return end
 
     if button == "LeftButton" then
@@ -255,7 +268,7 @@ function addonTable:OnTooltipClick(tooltip, slot, button)
     end
 end
 
-function addonTable:HighlightSlotButton(slot, isHighlighted)
+function addonTable:HighlightSlotButton(slot: GD.SlotData, isHighlighted: boolean)
     local slotBtn = GetSlotButton(slot, self.currentUnit)
     if not slotBtn then return end
 
@@ -284,7 +297,7 @@ function addonTable:HighlightSlotButton(slot, isHighlighted)
     end
 end
 
-function addonTable:SetTooltipHighlight(tooltip, isHighlighted, slotId)
+function addonTable:SetTooltipHighlight(tooltip: GD.GearTooltip, isHighlighted: boolean, slotId?: number)
     if not tooltip then return end
 
     if isHighlighted then
@@ -313,17 +326,17 @@ function addonTable:SetTooltipHighlight(tooltip, isHighlighted, slotId)
     end
 end
 
-function addonTable:OnTooltipEnter(tooltip, slot)
+function addonTable:OnTooltipEnter(tooltip: GD.GearTooltip, slot: GD.SlotData)
     self:HighlightSlotButton(slot, true)
     self:SetTooltipHighlight(tooltip, true, slot.id)
 end
 
-function addonTable:OnTooltipLeave(tooltip, slot)
+function addonTable:OnTooltipLeave(tooltip: GD.GearTooltip, slot: GD.SlotData)
     self:HighlightSlotButton(slot, false)
     self:SetTooltipHighlight(tooltip, false, slot.id)
 end
 
-function addonTable:PopulateTooltip(tooltip, slotId, unit)
+function addonTable:PopulateTooltip(tooltip: GD.GearTooltip, slotId: number, unit?: string): boolean
     unit = unit or "player"
     local itemLink = SafeGetInventoryItemLink(unit, slotId)
     if not itemLink then
@@ -342,7 +355,7 @@ function addonTable:PopulateTooltip(tooltip, slotId, unit)
     -- 1. Populate using standard Blizzard SetInventoryItem API
     local hasLines = false
     if tooltip.SetInventoryItem then
-        local ok = pcall(tooltip.SetInventoryItem, tooltip, unit, slotId)
+        local ok = pcall(tooltip.SetInventoryItem as function(GD.GearTooltip, string, number), tooltip, unit, slotId)
         if ok and tooltip:NumLines() and tooltip:NumLines() > 0 then
             hasLines = true
         end
@@ -368,7 +381,7 @@ function addonTable:PopulateTooltip(tooltip, slotId, unit)
     return true
 end
 
-function addonTable:UpdateTooltipBorder(tooltip, slotId, unit)
+function addonTable:UpdateTooltipBorder(tooltip: GD.GearTooltip, slotId: number, unit?: string)
     unit = unit or self.currentUnit or "player"
     if not tooltip.itemLink then return end
 
@@ -451,7 +464,7 @@ function addonTable:HookInspectSlotButtons()
     self.inspectSlotsHooked = true
 end
 
-function addonTable:HighlightSlotTooltip(slotId, isHighlighted)
+function addonTable:HighlightSlotTooltip(slotId: number, isHighlighted: boolean)
     local tt = self.tooltips[slotId]
     if tt and tt:IsShown() then
         self:SetTooltipHighlight(tt, isHighlighted, slotId)
@@ -479,7 +492,7 @@ end
 -- =========================================================================
 -- Smart Layout Engine
 -- =========================================================================
-function addonTable:LayoutTooltips(targetFrame)
+function addonTable:LayoutTooltips(targetFrame?: Frame)
     targetFrame = targetFrame or CharacterFrame
     if not targetFrame then return end
 
@@ -488,9 +501,9 @@ function addonTable:LayoutTooltips(targetFrame)
     local gapY = 6
     local gapX = 8
 
-    local leftInner, leftOuter = {}, {}
-    local rightInner, rightOuter = {}, {}
-    local weaponList = {}
+    local leftInner, leftOuter: {GD.GearTooltip}, {GD.GearTooltip} = {}, {}
+    local rightInner, rightOuter: {GD.GearTooltip}, {GD.GearTooltip} = {}, {}
+    local weaponList: {GD.GearTooltip} = {}
 
     for _, slot in ipairs(SLOTS_DATA) do
         local tt = self.tooltips[slot.id]
@@ -515,11 +528,11 @@ function addonTable:LayoutTooltips(targetFrame)
 
     if layoutMode == "single" then
         -- Single Column Layout
-        local leftCombined = {}
+        local leftCombined: {GD.GearTooltip} = {}
         for _, tt in ipairs(leftInner) do table.insert(leftCombined, tt) end
         for _, tt in ipairs(leftOuter) do table.insert(leftCombined, tt) end
 
-        local prev = nil
+        local prev: GD.GearTooltip = nil
         for _, tt in ipairs(leftCombined) do
             tt:ClearAllPoints()
             if not prev then
@@ -531,7 +544,7 @@ function addonTable:LayoutTooltips(targetFrame)
             tt:Show()
         end
 
-        local rightCombined = {}
+        local rightCombined: {GD.GearTooltip} = {}
         for _, tt in ipairs(rightInner) do table.insert(rightCombined, tt) end
         for _, tt in ipairs(rightOuter) do table.insert(rightCombined, tt) end
 
@@ -558,8 +571,8 @@ function addonTable:LayoutTooltips(targetFrame)
         end
 
         -- 1. LEFT INNER COLUMN
-        local prev = nil
-        local maxInnerLeftWidth = 0
+        local prev: GD.GearTooltip = nil
+        local maxInnerLeftWidth: number = 0
         for _, tt in ipairs(leftInner) do
             tt:ClearAllPoints()
             if not prev then
@@ -590,7 +603,7 @@ function addonTable:LayoutTooltips(targetFrame)
 
         -- 3. RIGHT INNER COLUMN
         prev = nil
-        local maxInnerRightWidth = 0
+        local maxInnerRightWidth: number = 0
         for _, tt in ipairs(rightInner) do
             tt:ClearAllPoints()
             if not prev then
@@ -653,20 +666,20 @@ end
 -- =========================================================================
 -- Character Sheet Native Tab & Pane (No Tooltip Overlay)
 -- =========================================================================
-function addonTable:GetTabPane()
+function addonTable:GetTabPane(): GD.SettingsPane
     if not self.tabPane then
         self:CreateTabPane()
     end
     return self.tabPane
 end
 
-function addonTable:CreateTabPane()
+function addonTable:CreateTabPane(): GD.SettingsPane
     if self.tabPane then return self.tabPane end
 
     local parent = PaperDollFrame or CharacterFrame
     if not parent then return end
 
-    local pane = CreateFrame("Frame", "GearDisplayTabPane", parent)
+    local pane = CreateFrame("Frame", "GearDisplayTabPane", parent) as GD.SettingsPane
 
     -- Anchor seamlessly into CharacterFrame sidebar area (matching CharacterStatsPane)
     if CharacterStatsPane then
@@ -730,7 +743,7 @@ function addonTable:CreateTabPane()
         addonTable:RefreshTabPaneSettings()
         if addonTable.isShowing then addonTable:RefreshGear() end
     end)
-    btnGrid:SetScript("OnEnter", function(s)
+    btnGrid:SetScript("OnEnter", function(s: Button)
         GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
         GameTooltip:AddLine(L["CONFIG_LAYOUT_GRID"], 1, 0.82, 0)
         GameTooltip:AddLine(L["CONFIG_LAYOUT_GRID_TT"], 1, 1, 1, true)
@@ -748,7 +761,7 @@ function addonTable:CreateTabPane()
         addonTable:RefreshTabPaneSettings()
         if addonTable.isShowing then addonTable:RefreshGear() end
     end)
-    btnSingle:SetScript("OnEnter", function(s)
+    btnSingle:SetScript("OnEnter", function(s: Button)
         GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
         GameTooltip:AddLine(L["CONFIG_LAYOUT_SINGLE"], 1, 0.82, 0)
         GameTooltip:AddLine(L["CONFIG_LAYOUT_SINGLE_TT"], 1, 1, 1, true)
@@ -765,13 +778,13 @@ function addonTable:CreateTabPane()
     slider:SetValueStep(0.05)
     slider:SetObeyStepOnDrag(true)
 
-    local sLabel = _G[slider:GetName() .. "Text"]
-    local sLow = _G[slider:GetName() .. "Low"]
-    local sHigh = _G[slider:GetName() .. "High"]
+    local sLabel = G[slider:GetName() .. "Text"] as FontString
+    local sLow = G[slider:GetName() .. "Low"] as FontString
+    local sHigh = G[slider:GetName() .. "High"] as FontString
     if sLow then sLow:SetText("60%") end
     if sHigh then sHigh:SetText("120%") end
 
-    slider:SetScript("OnValueChanged", function(s, value)
+    slider:SetScript("OnValueChanged", function(_s: Slider, value: number)
         value = math.floor(value * 20 + 0.5) / 20
         GearDisplayDB.scale = value
         if sLabel then
@@ -781,7 +794,7 @@ function addonTable:CreateTabPane()
             addonTable:RefreshGear()
         end
     end)
-    slider:SetScript("OnEnter", function(s)
+    slider:SetScript("OnEnter", function(s: Slider)
         GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
         GameTooltip:AddLine(L["CONFIG_SCALE_LABEL"], 1, 0.82, 0)
         GameTooltip:AddLine(L["CONFIG_SCALE_TT"], 1, 1, 1, true)
@@ -795,15 +808,15 @@ function addonTable:CreateTabPane()
     checkGroup:SetSize(170, 122)
     checkGroup:SetPoint("TOP", slider, "BOTTOM", 0, -20)
 
-    local function CreateTabCheck(text, ttDesc, dbKey, relativeTo, isFirst)
-        local cb = CreateFrame("CheckButton", nil, checkGroup, "InterfaceOptionsCheckButtonTemplate")
+    local function CreateTabCheck(text: string, ttDesc: string, dbKey: GD.BoolSetting, relativeTo: Region, isFirst: boolean): GD.LabeledCheck
+        local cb = CreateFrame("CheckButton", nil, checkGroup, "InterfaceOptionsCheckButtonTemplate") as GD.LabeledCheck
         if isFirst then
             cb:SetPoint("TOPLEFT", checkGroup, "TOPLEFT", 0, 0)
         else
             cb:SetPoint("TOPLEFT", relativeTo, "BOTTOMLEFT", 0, -6)
         end
         local cbName = cb:GetName()
-        local label = cb.Text or (cbName and _G[cbName .. "Text"])
+        local label = cb.Text or (cbName and (G[cbName .. "Text"] as FontString))
         if not label then
             label = cb:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
             label:SetPoint("LEFT", cb, "RIGHT", 4, 0)
@@ -813,13 +826,13 @@ function addonTable:CreateTabPane()
         label:SetFontObject(GameFontHighlightSmall)
         label:SetWordWrap(true)
         label:SetWidth(142)
-        cb:SetScript("OnClick", function(s)
+        cb:SetScript("OnClick", function(s: GD.LabeledCheck)
             GearDisplayDB[dbKey] = s:GetChecked()
             if addonTable.isShowing then
                 addonTable:RefreshGear()
             end
         end)
-        cb:SetScript("OnEnter", function(s)
+        cb:SetScript("OnEnter", function(s: GD.LabeledCheck)
             GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
             GameTooltip:AddLine(text, 1, 0.82, 0)
             GameTooltip:AddLine(ttDesc, 1, 1, 1, true)
@@ -869,7 +882,7 @@ function addonTable:RefreshTabPaneSettings()
     local curScale = GearDisplayDB.scale or 1.00
     if pane.scaleSlider then
         pane.scaleSlider:SetValue(curScale)
-        local sLabel = _G[pane.scaleSlider:GetName() .. "Text"]
+        local sLabel = G[pane.scaleSlider:GetName() .. "Text"] as FontString
         if sLabel then
             sLabel:SetText(string.format("%s: %d%%", L["CONFIG_SCALE_LABEL"], math.floor(curScale * 100 + 0.5)))
         end
@@ -878,7 +891,7 @@ function addonTable:RefreshTabPaneSettings()
     pane.isUpdating = false
 end
 
-function addonTable:UpdateTabPane(unit)
+function addonTable:UpdateTabPane(_unit?: string)
     if not self.tabPane then return end
     self:RefreshTabPaneSettings()
 end
@@ -890,9 +903,9 @@ function addonTable:InitSidebarTab()
     if self.sidebarTabInitialized then return end
     if not PaperDollSidebarTabs then return end
 
-    local tab = _G["GearDisplaySidebarTab"]
+    local tab = G["GearDisplaySidebarTab"] as GD.SidebarTab
     if not tab then
-        tab = CreateFrame("CheckButton", "GearDisplaySidebarTab", PaperDollSidebarTabs)
+        tab = CreateFrame("CheckButton", "GearDisplaySidebarTab", PaperDollSidebarTabs) as GD.SidebarTab
         tab:SetSize(42, 42)
 
         -- Icon (Armor chestpiece)
@@ -932,7 +945,7 @@ function addonTable:InitSidebarTab()
             addonTable:ToggleTab()
         end)
 
-        tab:SetScript("OnEnter", function(s)
+        tab:SetScript("OnEnter", function(s: GD.SidebarTab)
             GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
             GameTooltip:AddLine(L["TAB_TITLE"] or "Gear Display", 1, 0.82, 0)
             GameTooltip:AddLine(L["BTN_TOOLTIP_DESC"] or "Display equipped gear tooltips and stats panel", 1, 1, 1, true)
@@ -956,8 +969,8 @@ function addonTable:InitSidebarTab()
     self:UpdateSidebarLayout()
 end
 
-function addonTable:SetSidebarTabSelected(selected)
-    local tab = self.sidebarTab or _G["GearDisplaySidebarTab"]
+function addonTable:SetSidebarTabSelected(selected: boolean)
+    local tab = self.sidebarTab or G["GearDisplaySidebarTab"] as GD.SidebarTab
     if not tab then return end
     tab.isSelected = selected
     if tab.SetChecked then
@@ -973,10 +986,10 @@ function addonTable:SetSidebarTabSelected(selected)
 end
 
 function addonTable:UpdateSidebarLayout()
-    local tab = self.sidebarTab or _G["GearDisplaySidebarTab"]
+    local tab = self.sidebarTab or G["GearDisplaySidebarTab"] as GD.SidebarTab
     if not tab or not PaperDollSidebarTabs or not PaperDollSidebarTabs:IsShown() then return end
 
-    local anchorTab = nil
+    local anchorTab: Button = nil
     if PaperDollSidebarTab3 and PaperDollSidebarTab3:IsShown() then
         anchorTab = PaperDollSidebarTab3
     elseif PaperDollSidebarTab2 and PaperDollSidebarTab2:IsShown() then
@@ -1054,10 +1067,10 @@ function addonTable:InitBottomTab()
     if self.bottomTabInitialized or not CharacterFrame or PaperDollSidebarTabs then return end
     if not CharacterFrameTab1 then return end
 
-    local numTabs = CharacterFrame.numTabs
+    local numTabs = (CharacterFrame as GD.CharacterFrameEx).numTabs
     if type(numTabs) ~= "number" or numTabs <= 0 then
         numTabs = 0
-        while _G["CharacterFrameTab" .. (numTabs + 1)] do
+        while G["CharacterFrameTab" .. (numTabs + 1)] do
             numTabs = numTabs + 1
         end
         if numTabs == 0 then return end
@@ -1065,12 +1078,12 @@ function addonTable:InitBottomTab()
 
     local newTabId = numTabs + 1
     local tabName = "CharacterFrameTab" .. newTabId
-    local prevTab = _G["CharacterFrameTab" .. numTabs]
+    local prevTab = G["CharacterFrameTab" .. numTabs] as Button
     if not prevTab then return end
 
-    local ok, tab = pcall(CreateFrame, "Button", tabName, CharacterFrame, "CharacterFrameTabButtonTemplate")
+    local ok, tab = pcall(CreateFrame as CreateButtonFn, "Button", tabName, CharacterFrame, "CharacterFrameTabButtonTemplate")
     if not ok or not tab or not tab.GetNormalTexture then
-        ok, tab = pcall(CreateFrame, "Button", tabName, CharacterFrame, "PanelTabButtonTemplate")
+        ok, tab = pcall(CreateFrame as CreateButtonFn, "Button", tabName, CharacterFrame, "PanelTabButtonTemplate")
     end
     if not ok or not tab then return end
 
@@ -1109,8 +1122,9 @@ function addonTable:HookNativeTabs()
     if CharacterFrameTab3 then CharacterFrameTab3:HookScript("OnClick", OnBlizzardTabSwitched) end
 
     -- On CharacterFrameModeTabs (outer tabs), safely hook OnMouseDown without modifying Blizzard methods
-    if CharacterFrame and CharacterFrame.ModeTabs and CharacterFrame.ModeTabs.Tabs then
-        for _, modeTab in ipairs(CharacterFrame.ModeTabs.Tabs) do
+    local cf = CharacterFrame as GD.CharacterFrameEx
+    if cf and cf.ModeTabs and cf.ModeTabs.Tabs then
+        for _, modeTab in ipairs(cf.ModeTabs.Tabs) do
             if modeTab and modeTab.HookScript then
                 modeTab:HookScript("OnMouseDown", function()
                     if modeTab.frameName ~= "PaperDollFrame" then
@@ -1144,7 +1158,7 @@ function addonTable:SelectGearDisplayTab()
 
     -- 1. Uncheck all Blizzard sidebar tabs safely so none of them retain the "selected" border
     for i = 1, 3 do
-        local tab = _G["PaperDollSidebarTab" .. i]
+        local tab = G["PaperDollSidebarTab" .. i] as CheckButton -- a plain Button on Mainline (no SetChecked)
         if tab and tab.SetChecked then
             tab:SetChecked(false)
         end
@@ -1157,10 +1171,10 @@ function addonTable:SelectGearDisplayTab()
     if CharacterStatsPane then CharacterStatsPane:Hide() end
     if CharacterStatsPaneScrollBox then CharacterStatsPaneScrollBox:Hide() end
     if CharacterStatsPanePetScrollBox then CharacterStatsPanePetScrollBox:Hide() end
-    if PaperDollFrame and PaperDollFrame.EquipmentManagerPane then PaperDollFrame.EquipmentManagerPane:Hide() end
-    if PaperDollEquipmentManagerPane then PaperDollEquipmentManagerPane:Hide() end
-    if PaperDollTitlesPane then PaperDollTitlesPane:Hide() end
-    if PetPaperDollFrameCompanionFrame then PetPaperDollFrameCompanionFrame:Hide() end
+    if PaperDollFrame and (PaperDollFrame as GD.PaperDollFrameEx).EquipmentManagerPane then (PaperDollFrame as GD.PaperDollFrameEx).EquipmentManagerPane:Hide() end
+    if G["PaperDollEquipmentManagerPane"] then (G["PaperDollEquipmentManagerPane"] as Frame):Hide() end
+    if G["PaperDollTitlesPane"] then (G["PaperDollTitlesPane"] as Frame):Hide() end
+    if G["PetPaperDollFrameCompanionFrame"] then (G["PetPaperDollFrameCompanionFrame"] as Frame):Hide() end
 
     -- 4. Show our tab pane in the character sheet sidebar area
     self:CreateTabPane()
@@ -1195,7 +1209,7 @@ function addonTable:SelectStatsTab()
         if PaperDollSidebarTab1.Click then
             PaperDollSidebarTab1:Click()
         elseif PaperDollSidebarTab1:GetScript("OnClick") then
-            PaperDollSidebarTab1:GetScript("OnClick")(PaperDollSidebarTab1)
+            (PaperDollSidebarTab1:GetScript("OnClick") as function(Button))(PaperDollSidebarTab1)
         end
     elseif CharacterStatsPane then
         CharacterStatsPane:Show()
@@ -1325,7 +1339,7 @@ function addonTable:UpdateToggleButtonPosition()
     if not btn then return end
 
     -- Fallback button positioning for UI flavors without PaperDollSidebarTabs
-    local anchorTab = nil
+    local anchorTab: Button = nil
     if PaperDollSidebarTab3 and PaperDollSidebarTab3:IsShown() then
         anchorTab = PaperDollSidebarTab3
     elseif PaperDollSidebarTab2 and PaperDollSidebarTab2:IsShown() then
@@ -1337,7 +1351,7 @@ function addonTable:UpdateToggleButtonPosition()
     btn:ClearAllPoints()
 
     if anchorTab then
-        local parent = anchorTab:GetParent() or PaperDollSidebarTabs or PaperDollFrame or CharacterFrame
+        local parent = anchorTab:GetParent() as Frame or PaperDollSidebarTabs or PaperDollFrame or CharacterFrame
         btn:SetParent(parent)
         btn:SetFrameStrata(anchorTab:GetFrameStrata())
         btn:SetFrameLevel(anchorTab:GetFrameLevel())
@@ -1370,11 +1384,11 @@ function addonTable:InitToggleButton()
     if self.toggleBtn then return end
 
     local anchorTab = PaperDollSidebarTab3 or PaperDollSidebarTab2 or PaperDollSidebarTab1
-    local parent = (anchorTab and anchorTab:GetParent()) or PaperDollSidebarTabs or PaperDollFrame or CharacterFrame
+    local parent = (anchorTab and anchorTab:GetParent() as Frame) or PaperDollSidebarTabs or PaperDollFrame or CharacterFrame
     if not parent then return end
 
-    local btn = CreateFrame("Button", "GearDisplayToggleBtn", parent)
-    local width, height = 33, 35
+    local btn = CreateFrame("Button", "GearDisplayToggleBtn", parent) as GD.ToggleButton
+    local width, height: number, number = 33, 35
     if anchorTab then
         local w, h = anchorTab:GetSize()
         if w and h and w > 0 and h > 0 then
@@ -1420,7 +1434,7 @@ function addonTable:InitToggleButton()
         addonTable:ToggleTab()
     end)
 
-    btn:SetScript("OnEnter", function(s)
+    btn:SetScript("OnEnter", function(s: GD.ToggleButton)
         GameTooltip:SetOwner(s, "ANCHOR_RIGHT")
         GameTooltip:AddLine(L["BTN_TOOLTIP_TITLE"], 1, 0.82, 0)
         GameTooltip:AddLine(L["BTN_TOOLTIP_DESC"], 1, 1, 1, true)
@@ -1449,7 +1463,7 @@ function addonTable:InitInspectButton()
     local parent = InspectPaperDollFrame or InspectFrame
     if not parent then return end
 
-    local btn = CreateFrame("Button", "GearDisplayInspectBtn", parent, "UIPanelButtonTemplate")
+    local btn = CreateFrame("Button", "GearDisplayInspectBtn", parent, "UIPanelButtonTemplate") as GD.ToggleButton
     btn:SetSize(84, 22)
     btn:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -40, -38)
     btn:SetText(L["SHOW_GEAR"])
@@ -1473,7 +1487,7 @@ function addonTable:InitInspectButton()
     self:HookInspectSlotButtons()
 end
 
-function addonTable:UpdateButton(isShowing)
+function addonTable:UpdateButton(isShowing: boolean)
     self:SetSidebarTabSelected(isShowing)
     local btn = self.toggleBtn
     if btn then
@@ -1505,7 +1519,7 @@ function addonTable:UpdateButton(isShowing)
     end
 end
 
-function addonTable:ShowGear(unit)
+function addonTable:ShowGear(unit?: string)
     unit = unit or "player"
     self.currentUnit = unit
 
@@ -1532,9 +1546,9 @@ function addonTable:ShowGear(unit)
     if unit == "player" then
         self:CreateTabPane()
         if CharacterStatsPane then CharacterStatsPane:Hide() end
-        if PaperDollEquipmentManagerPane then PaperDollEquipmentManagerPane:Hide() end
-        if PaperDollTitlesPane then PaperDollTitlesPane:Hide() end
-        if PetPaperDollFrameCompanionFrame then PetPaperDollFrameCompanionFrame:Hide() end
+        if G["PaperDollEquipmentManagerPane"] then (G["PaperDollEquipmentManagerPane"] as Frame):Hide() end
+        if G["PaperDollTitlesPane"] then (G["PaperDollTitlesPane"] as Frame):Hide() end
+        if G["PetPaperDollFrameCompanionFrame"] then (G["PetPaperDollFrameCompanionFrame"] as Frame):Hide() end
         if self.tabPane then
             self.tabPane:Show()
             self:UpdateTabPane(unit)
@@ -1557,9 +1571,10 @@ end
 function addonTable:HideGear()
     if not self.isShowing and not (self.tabPane and self.tabPane:IsShown()) then return end
 
-    if self.refreshTimer then
-        if type(self.refreshTimer) == "table" and self.refreshTimer.Cancel then
-            self.refreshTimer:Cancel()
+    local timer = self.refreshTimer
+    if timer then
+        if timer is FunctionContainer and timer.Cancel then
+            timer:Cancel()
         end
         self.refreshTimer = nil
     end
@@ -1589,7 +1604,7 @@ function addonTable:HideGear()
     self.currentUnit = nil
 end
 
-function addonTable:Toggle(unit)
+function addonTable:Toggle(unit?: string)
     if self.isShowing then
         self:HideGear()
     else
@@ -1616,7 +1631,7 @@ function addonTable:RefreshGear()
     end
 end
 
-function addonTable:RequestRefresh(delay)
+function addonTable:RequestRefresh(delay?: number)
     if self.refreshTimer then return end
     delay = delay or 0.1
     if C_Timer and C_Timer.NewTimer then
@@ -1656,7 +1671,7 @@ eventFrame:RegisterEvent("INSPECT_READY")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("UPDATE_INVENTORY_DURABILITY")
 
-eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
+eventFrame:SetScript("OnEvent", function(_self: Frame, event: string, arg1: any)
     if event == "PLAYER_LOGIN" then
         addonTable:InitDB()
         addonTable:InitSidebarTab()

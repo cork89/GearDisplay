@@ -1,7 +1,9 @@
-local addonName, addonTable = ...
-_G[addonName] = addonTable
+local type GD = require("GearDisplayTypes")
+local addonName, addonTable = ... as (string, GD.Namespace)
+local G = _G as {string:any}
+G[addonName] = addonTable
 
-local L = {}
+local L: {string:string} = {}
 addonTable.L = L
 
 -- English / Default strings

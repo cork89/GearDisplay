@@ -1,0 +1,59 @@
+name: Types
+
+on:
+  push:
+    branches: [main, beta]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the packager dry run reads tags and history
+
+      - name: Set up Teal
+        uses: ./.github/actions/setup-tl
+
+      - name: Generated declarations are up to date
+        run: |
+          sh types/gen/build.sh
+          git diff --exit-code -- types/generated || {
+            echo "::error::types/generated is stale; run types/gen/build.sh and commit the result"
+            exit 1
+          }
+
+      - name: Declarations and tests type-check
+        run: sh types/check.sh
+
+      - name: Addon type-checks and compiles
+        run: sh build.sh
+
+      # Same as the release job, minus the upload: catches a broken package before a tag.
+      - name: Stage build output for the packager
+        run: git add -f dist
+
+      - name: Package (dry run, no upload)
+        uses: BigWigsMods/packager@v2
+        with:
+          args: -d
+          pandoc: "false"
+
+      - name: Package contains the built addon
+        run: |
+          pkg=.release/GearDisplay
+          missing=0
+          for f in GearDisplay.toc dist/Locales.lua dist/Config.lua dist/GearDisplay.lua; do
+            [ -f "$pkg/$f" ] || { echo "::error::missing from package: $f"; missing=1; }
+          done
+          if find "$pkg" -name '*.tl' | grep -q .; then
+            echo "::error::package contains .tl sources"; missing=1
+          fi
+          ls -R "$pkg"
+          exit $missing
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GearDisplay-package
+          path: .release/GearDisplay
