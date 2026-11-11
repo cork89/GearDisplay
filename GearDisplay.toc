@@ -7,6 +7,6 @@
 ## SavedVariables: GearDisplayDB
 ## DefaultState: enabled
 
-Locales.lua
-Config.lua
-GearDisplay.lua
+dist\Locales.lua
+dist\Config.lua
+dist\GearDisplay.lua

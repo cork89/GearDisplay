@@ -1,7 +1,13 @@
-local addonName, addonTable = ...
+local type GD = require("GearDisplayTypes")
+local _addonName, addonTable = ... as (string, GD.Namespace)
 local L = addonTable.L
 
-local DEFAULTS = {
+global GearDisplayDB: GD.DB
+global SLASH_GEARDISPLAY1: string
+global SLASH_GEARDISPLAY2: string
+local G = _G as {string:any}
+
+local DEFAULTS: GD.DB = {
     scale = 1.00,
     autoCenter = true,
     qualityBorders = true,
@@ -10,15 +16,21 @@ local DEFAULTS = {
     layout = "grid", -- "grid" or "single"
 }
 
+-- Copies every DEFAULTS field that is nil in `db` (or all of them when `overwrite`).
+local function ApplyDefaults(db: GD.DB, overwrite: boolean)
+    if overwrite or db.scale == nil then db.scale = DEFAULTS.scale end
+    if overwrite or db.autoCenter == nil then db.autoCenter = DEFAULTS.autoCenter end
+    if overwrite or db.qualityBorders == nil then db.qualityBorders = DEFAULTS.qualityBorders end
+    if overwrite or db.showCosmetics == nil then db.showCosmetics = DEFAULTS.showCosmetics end
+    if overwrite or db.hideDefaultTooltipOnHover == nil then db.hideDefaultTooltipOnHover = DEFAULTS.hideDefaultTooltipOnHover end
+    if overwrite or db.layout == nil then db.layout = DEFAULTS.layout end
+end
+
 function addonTable:InitDB()
     if type(GearDisplayDB) ~= "table" then
         GearDisplayDB = {}
     end
-    for k, v in pairs(DEFAULTS) do
-        if GearDisplayDB[k] == nil then
-            GearDisplayDB[k] = v
-        end
-    end
+    ApplyDefaults(GearDisplayDB, false)
 
     -- Sanitize scale (must be a number clamped between 0.60 and 1.20)
     if type(GearDisplayDB.scale) ~= "number" or GearDisplayDB.scale < 0.60 or GearDisplayDB.scale > 1.20 then
@@ -26,7 +38,7 @@ function addonTable:InitDB()
     end
 
     -- Sanitize booleans
-    local boolKeys = { "autoCenter", "qualityBorders", "showCosmetics", "hideDefaultTooltipOnHover" }
+    local boolKeys: {GD.BoolSetting} = { "autoCenter", "qualityBorders", "showCosmetics", "hideDefaultTooltipOnHover" }
     for _, k in ipairs(boolKeys) do
         if type(GearDisplayDB[k]) ~= "boolean" then
             GearDisplayDB[k] = DEFAULTS[k]
@@ -41,9 +53,7 @@ end
 
 function addonTable:ResetDB()
     GearDisplayDB = {}
-    for k, v in pairs(DEFAULTS) do
-        GearDisplayDB[k] = v
-    end
+    ApplyDefaults(GearDisplayDB, true)
     if self.configFrame and self.configFrame:IsShown() then
         self:RefreshConfigFrame()
     end
@@ -71,10 +81,10 @@ local function SyncSettingsUI()
     end
 end
 
-SlashCmdList["GEARDISPLAY"] = function(msg)
-    local cmd, arg = msg:match("^(%S*)%s*(.-)$")
+SlashCmdList["GEARDISPLAY"] = function(msg: string)
+    local cmd, argStr = msg:match("^(%S*)%s*(.-)$")
     cmd = (cmd or ""):lower()
-    arg = (arg or ""):lower()
+    argStr = (argStr or ""):lower()
 
     if cmd == "" then
         if addonTable.ToggleTab then
@@ -108,7 +118,7 @@ SlashCmdList["GEARDISPLAY"] = function(msg)
         end
         SyncSettingsUI()
     elseif cmd == "scale" then
-        local num = tonumber(arg)
+        local num = tonumber(argStr)
         if num and num >= 0.60 and num <= 1.20 then
             GearDisplayDB.scale = num
             print(string.format(L["MSG_SCALE_SET"], math.floor(num * 100 + 0.5)))
@@ -152,7 +162,7 @@ function addonTable:CreateConfigFrame()
     if self.configFrame then return end
 
     local template = BackdropTemplateMixin and "BackdropTemplate,BasicFrameTemplateWithInset" or "BasicFrameTemplateWithInset"
-    local f = CreateFrame("Frame", "GearDisplayConfigFrame", UIParent, template)
+    local f = CreateFrame("Frame", "GearDisplayConfigFrame", UIParent, template) as GD.SettingsPane
     f:SetSize(360, 390)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
@@ -177,11 +187,11 @@ function addonTable:CreateConfigFrame()
     f.content = content
 
     -- Checkbox helper
-    local function CreateCheck(text, ttDesc, dbKey, yOff)
-        local cb = CreateFrame("CheckButton", nil, content, "InterfaceOptionsCheckButtonTemplate")
+    local function CreateCheck(text: string, ttDesc: string, dbKey: GD.BoolSetting, yOff: number): GD.LabeledCheck
+        local cb = CreateFrame("CheckButton", nil, content, "InterfaceOptionsCheckButtonTemplate") as GD.LabeledCheck
         cb:SetPoint("TOPLEFT", content, "TOPLEFT", 8, yOff)
         local cbName = cb:GetName()
-        local label = cb.Text or (cbName and _G[cbName .. "Text"])
+        local label = cb.Text or (cbName and (G[cbName .. "Text"] as FontString))
         if not label then
             label = cb:CreateFontString(nil, "ARTWORK", "GameFontNormal")
             label:SetPoint("LEFT", cb, "RIGHT", 4, 0)
@@ -189,13 +199,13 @@ function addonTable:CreateConfigFrame()
         end
         label:SetText(text)
         label:SetFontObject(GameFontNormal)
-        cb:SetScript("OnClick", function(self)
+        cb:SetScript("OnClick", function(self: GD.LabeledCheck)
             GearDisplayDB[dbKey] = self:GetChecked()
             if addonTable.isShowing then
                 addonTable:RefreshGear()
             end
         end)
-        cb:SetScript("OnEnter", function(self)
+        cb:SetScript("OnEnter", function(self: GD.LabeledCheck)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:AddLine(text, 1, 0.82, 0)
             GameTooltip:AddLine(ttDesc, 1, 1, 1, true)
@@ -226,7 +236,7 @@ function addonTable:CreateConfigFrame()
             addonTable:RefreshGear()
         end
     end)
-    btnGrid:SetScript("OnEnter", function(self)
+    btnGrid:SetScript("OnEnter", function(self: Button)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(L["CONFIG_LAYOUT_GRID"], 1, 0.82, 0)
         GameTooltip:AddLine(L["CONFIG_LAYOUT_GRID_TT"], 1, 1, 1, true)
@@ -246,7 +256,7 @@ function addonTable:CreateConfigFrame()
             addonTable:RefreshGear()
         end
     end)
-    btnSingle:SetScript("OnEnter", function(self)
+    btnSingle:SetScript("OnEnter", function(self: Button)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(L["CONFIG_LAYOUT_SINGLE"], 1, 0.82, 0)
         GameTooltip:AddLine(L["CONFIG_LAYOUT_SINGLE_TT"], 1, 1, 1, true)
@@ -263,13 +273,13 @@ function addonTable:CreateConfigFrame()
     slider:SetValueStep(0.05)
     slider:SetObeyStepOnDrag(true)
 
-    local sLabel = _G[slider:GetName() .. "Text"]
-    local sLow = _G[slider:GetName() .. "Low"]
-    local sHigh = _G[slider:GetName() .. "High"]
+    local sLabel = G[slider:GetName() .. "Text"] as FontString
+    local sLow = G[slider:GetName() .. "Low"] as FontString
+    local sHigh = G[slider:GetName() .. "High"] as FontString
     if sLow then sLow:SetText("60%") end
     if sHigh then sHigh:SetText("120%") end
 
-    slider:SetScript("OnValueChanged", function(self, value)
+    slider:SetScript("OnValueChanged", function(_self: Slider, value: number)
         value = math.floor(value * 20 + 0.5) / 20 -- Round to 0.05
         GearDisplayDB.scale = value
         if sLabel then
@@ -279,7 +289,7 @@ function addonTable:CreateConfigFrame()
             addonTable:RefreshGear()
         end
     end)
-    slider:SetScript("OnEnter", function(self)
+    slider:SetScript("OnEnter", function(self: Slider)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:AddLine(L["CONFIG_SCALE_LABEL"], 1, 0.82, 0)
         GameTooltip:AddLine(L["CONFIG_SCALE_TT"], 1, 1, 1, true)
@@ -328,7 +338,7 @@ function addonTable:RefreshConfigFrame()
 
     local curScale = GearDisplayDB.scale or 1.00
     f.scaleSlider:SetValue(curScale)
-    local sLabel = _G[f.scaleSlider:GetName() .. "Text"]
+    local sLabel = G[f.scaleSlider:GetName() .. "Text"] as FontString
     if sLabel then
         sLabel:SetText(string.format("%s: %d%%", L["CONFIG_SCALE_LABEL"], math.floor(curScale * 100 + 0.5)))
     end
@@ -338,7 +348,7 @@ end
 function addonTable:RegisterSettingsCategory()
     if self.settingsCategoryRegistered then return end
 
-    local f = CreateFrame("Frame", "GearDisplaySettingsPanel", UIParent)
+    local f = CreateFrame("Frame", "GearDisplaySettingsPanel", UIParent) as GD.SettingsPane
     f.name = L["ADDON_TITLE"]
 
     local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -360,6 +370,8 @@ function addonTable:RegisterSettingsCategory()
         addonTable:ToggleConfig()
     end)
 
+    -- Pre-Dragonflight clients (Classic Era): the old Interface Options API.
+    local InterfaceOptions_AddCategory = G["InterfaceOptions_AddCategory"] as function(panel: Frame)
     if Settings and Settings.RegisterCanvasLayoutCategory and Settings.RegisterAddOnCategory then
         local category = Settings.RegisterCanvasLayoutCategory(f, f.name)
         category.ID = f.name
@@ -370,4 +382,3 @@ function addonTable:RegisterSettingsCategory()
         self.settingsCategoryRegistered = true
     end
 end
-
