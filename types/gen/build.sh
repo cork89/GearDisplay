@@ -45,7 +45,9 @@ local script = table.remove(arg, 1)
 local ok, err = xpcall(function() dofile(script) end, debug.traceback)
 if not ok then io.stderr:write(tostring(err), "\n") os.exit(1) end
 LUA
-tl run "$tmp/run.lua" "$tmp/build.lua" "$UI_SOURCE" "$KETHO" ..
+# The generator can't list directories itself (no io.popen in the standalone Linux tl binary).
+find "$KETHO/Annotations/Core/Widget" -name '*.lua' > "$tmp/ketho_widgets.txt"
+tl run "$tmp/run.lua" "$tmp/build.lua" "$UI_SOURCE" "$KETHO" .. "$tmp/ketho_widgets.txt"
 
 # Sanity check: the full environment must type-check.
 cd ../..

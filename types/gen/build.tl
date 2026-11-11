@@ -3,7 +3,9 @@
 --   2. Ketho/vscode-wow-api annotations (MIT)                                -- aliases, string enums, legacy globals
 --
 -- Usage: types/gen/build.sh (fetches pinned sources into types/.cache, then runs
---   `tl run build.tl <wow-ui-source dir> <vscode-wow-api dir>` from types/gen).
+--   `tl run build.tl <wow-ui-source dir> <vscode-wow-api dir> <types dir> <widget file list>` from types/gen).
+--   The widget file list is a text file of Ketho Annotations/Core/Widget/**/*.lua paths, one per line.
+--   build.sh makes it with `find`, because the standalone Linux tl binary has no io.popen.
 
 -- Run from types/gen (it has its own empty tlconfig.lua, so the WoW globals of
 -- the addon's tlconfig don't apply to this script). Paths are relative to types/.
@@ -16,6 +18,7 @@ local ui_source = arg[1] or (TYPES .. "/.cache/wow-ui-source")
 local ketho_root = arg[2] or (TYPES .. "/.cache/vscode-wow-api")
 local BLIZZ_DOCS = ui_source .. "/Interface/AddOns/Blizzard_APIDocumentationGenerated"
 local KETHO = ketho_root .. "/Annotations/Core"
+local KETHO_WIDGET_LIST = arg[4]
 
 --------------------------------------------------------------------------------
 -- Blizzard documentation shapes
@@ -687,19 +690,14 @@ local function ketho_signature(f: KFunc): string
    return "function(" .. table.concat(args, ", ") .. ")" .. (#rets > 0 and (": " .. table.concat(rets, ", ")) or "")
 end
 
-local function list_lua_files(dir: string): {string}
-   local cmd: string
-   if package.config:sub(1, 1) == "\\" then
-      cmd = 'dir /s /b "' .. (dir:gsub("/", "\\")) .. '\\*.lua" 2>nul'
-   else
-      cmd = 'find "' .. dir .. '" -name "*.lua" 2>/dev/null'
-   end
+-- Reads a file list (one path per line), sorted so the output doesn't depend on `find` order.
+local function read_file_list(list_path: string): {string}
+   assert(list_path, "missing argument 4: Ketho widget file list (run via build.sh)")
    local files: {string} = {}
-   local p = io.popen(cmd)
-   if p then
-      for line in p:lines() do table.insert(files, line) end
-      p:close()
+   for line in read_file(list_path):gmatch("[^\r\n]+") do
+      table.insert(files, line)
    end
+   assert(#files > 0, "Ketho widget file list is empty: " .. list_path)
    table.sort(files)
    return files
 end
@@ -893,7 +891,7 @@ local shadowed: {string} = {}
 local SKIP_KETHO_METHODS: {string:boolean} = { SetScript = true, HookScript = true, GetScript = true, HasScript = true }
 local ketho_methods: {string:{KFunc}} = {}
 local ketho_method_count = 0
-for _, file in ipairs(list_lua_files(KETHO .. "/Widget")) do
+for _, file in ipairs(read_file_list(KETHO_WIDGET_LIST)) do
    for _, f in ipairs(parse_ketho_functions(file)) do
       local cls = f.name:match("^([%w_]+):")
       if cls and widget_by_name[cls] then
